@@ -1,0 +1,9 @@
+langgraph
+langchain
+langchain-openai
+langchain-community
+mlflow
+pymupdf
+pydantic
+python-dotenv
+httpx

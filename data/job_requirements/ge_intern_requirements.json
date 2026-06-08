@@ -1,0 +1,60 @@
+{
+  "organization": "Red Hat Global Engineering",
+  "role": "Software Engineering Intern",
+  "departments": {
+    "AI": {
+      "name": "AI",
+      "required_skills": ["AI", "Automation", "Containers", "Open Source Software/OSS", "Python"]
+    },
+    "OCTO": {
+      "name": "OCTO (Office of the CTO)",
+      "required_skills": ["AI", "Application Development", "Machine Learning", "Open Source Software/OSS", "Security"]
+    },
+    "Hybrid Platforms": {
+      "name": "Hybrid Platforms",
+      "required_skills": ["Golang", "Python", "Kubernetes"]
+    },
+    "Hybrid Platforms UXD Design": {
+      "name": "Hybrid Platforms UXD Design",
+      "required_skills": ["AI", "HTML/CSS", "UI Design"]
+    },
+    "Hybrid Platforms UXD Research": {
+      "name": "Hybrid Platforms UXD Research",
+      "required_skills": ["Communications", "Qualitative Research", "Quantitative Research", "Analytical Skills", "Synthesis Skills"]
+    },
+    "Product Security": {
+      "name": "Product Security",
+      "required_skills": ["Security", "AI", "Risk Management"]
+    },
+    "Ansible": {
+      "name": "Ansible",
+      "required_skills": ["AI", "Git", "Linux-Operating System", "Python", "Quality Engineering"]
+    },
+    "Hybrid Cloud Management": {
+      "name": "Hybrid Cloud Management",
+      "required_skills": ["AI", "Application Development", "Containers", "Git", "Golang"]
+    },
+    "Experience Engineering (XE)": {
+      "name": "Experience Engineering (XE)",
+      "required_skills": ["Technical Writing"]
+    },
+    "Portfolio & Delivery": {
+      "name": "Portfolio & Delivery",
+      "required_skills": ["AI", "Containers", "DevOps", "Golang", "Python"]
+    },
+    "Ecosystem": {
+      "name": "Ecosystem",
+      "required_skills": ["Python", "Linux-Operating System", "Open Source Software/OSS"]
+    },
+    "Core Platforms": {
+      "name": "Core Platforms",
+      "required_skills": ["Git", "Golang", "Linux-Operating System", "Open Source Software/OSS", "Python"]
+    }
+  },
+  "general_qualifications": [
+    "Currently pursuing a Bachelor's degree in Computer Science or related field",
+    "Expected graduation between December 2025 and August 2026",
+    "Junior standing preferred",
+    "Located in or willing to work from Boston, MA or Raleigh, NC"
+  ]
+}

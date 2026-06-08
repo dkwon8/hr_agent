@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# MLflow
+mlruns/
+
+# Data artifacts (keep structure, ignore generated reports)
+data/report_*.json
+data/interview_schedule_*.csv
+data/feedback/feedback_history.json
+data/feedback/tuned_prompt.txt
+
+# Claude
+.claude/
+
+# Cursor
+.cursor/
