@@ -7,3 +7,5 @@ pymupdf
 pydantic
 python-dotenv
 httpx
+google-api-python-client
+google-auth

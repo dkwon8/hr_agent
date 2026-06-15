@@ -12,6 +12,7 @@ build/
 .venv/
 venv/
 env/
+.venv*/
 
 # IDE
 .idea/
@@ -22,6 +23,8 @@ env/
 
 # MLflow
 mlruns/
+mlflow.db
+mlartifacts/
 
 # Data artifacts (keep structure, ignore generated reports)
 data/report_*.json

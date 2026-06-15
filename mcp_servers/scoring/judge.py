@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -134,15 +135,30 @@ async def _score_candidate(
     if tracker:
         tracker.add(response)
 
+    content = response.content
+
     try:
-        return json.loads(response.content)
+        return json.loads(content)
     except json.JSONDecodeError:
-        content = response.content
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start != -1 and end > start:
-            return json.loads(content[start:end])
-        return None
+        pass
+
+    # Strip markdown fences if present
+    content = re.sub(r"^```(?:json)?\s*\n?", "", content.strip())
+    content = re.sub(r"\n?```\s*$", "", content.strip())
+
+    # Extract the outermost JSON object
+    start = content.find("{")
+    end = content.rfind("}") + 1
+    if start != -1 and end > start:
+        raw = content[start:end]
+        # Fix trailing commas before } or ]
+        raw = re.sub(r",\s*([}\]])", r"\1", raw)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 def _extract_top_departments(dept_scores: dict, top_n: int = 3) -> list[dict]:
@@ -163,6 +179,8 @@ async def llm_judge(state: PipelineState) -> dict:
     job_requirements = state["job_requirements"]
     top_k = state["top_k"]
 
+    SCORING_PASSES = 3
+
     llm = ChatOpenAI(
         model="gpt-5.4",
         api_key=OPENAI_API_KEY,
@@ -178,40 +196,85 @@ async def llm_judge(state: PipelineState) -> dict:
     active_prompt = _load_prompt()
 
     valid_dept_names = set(_get_department_names(job_requirements))
-    print(f"[Phase 4] Scoring {len(eligible)} candidates against {len(valid_dept_names)} departments...")
+    print(f"[Phase 4] Scoring {len(eligible)} candidates against {len(valid_dept_names)} departments ({SCORING_PASSES}-pass median)...")
 
     errors = []
 
     async def _score_and_assign(candidate: Candidate) -> str | None:
         try:
-            result = await _score_candidate(candidate, job_requirements, llm, tracker, active_prompt)
-            if not result or "departments" not in result:
-                return f"[llm_judge] {candidate.id}: LLM returned unparseable response"
+            pass_results = []
+            for _ in range(SCORING_PASSES):
+                result = await _score_candidate(candidate, job_requirements, llm, tracker, active_prompt)
+                if result and "departments" in result:
+                    pass_results.append(result)
 
-            dept_scores = result["departments"]
-            unknown = set(dept_scores.keys()) - valid_dept_names
+            if not pass_results:
+                return f"[llm_judge] {candidate.id}: All {SCORING_PASSES} scoring passes failed"
+
+            # For each department, take the median score across passes
+            all_dept_names = set()
+            for r in pass_results:
+                all_dept_names.update(r["departments"].keys())
+
+            median_dept_scores = {}
+            for dept in all_dept_names:
+                dept_pass_scores = []
+                for r in pass_results:
+                    if dept in r["departments"]:
+                        dept_pass_scores.append(r["departments"][dept])
+
+                if not dept_pass_scores:
+                    continue
+
+                scores_list = [d.get("score", 0) for d in dept_pass_scores]
+                scores_list.sort()
+                median_idx = len(scores_list) // 2
+                median_entry = dept_pass_scores[scores_list.index(scores_list[median_idx])]
+                median_dept_scores[dept] = median_entry
+
+            unknown = set(median_dept_scores.keys()) - valid_dept_names
             warning = None
             if unknown:
                 warning = f"[llm_judge] {candidate.id}: LLM returned unknown department names: {unknown}"
 
-            candidate.department_scores = dept_scores
+            candidate.department_scores = median_dept_scores
 
-            top_depts = _extract_top_departments(dept_scores)
+            top_depts = _extract_top_departments(median_dept_scores)
             candidate.top_3_departments = top_depts
 
             if top_depts:
                 best = top_depts[0]
                 candidate.best_fit_department = best["department"]
                 candidate.quality_score = best.get("score", 0)
+
+                # Use the overall_reasoning from the pass that had the median best-dept score
+                best_dept = best["department"]
+                best_scores = []
+                for r in pass_results:
+                    if best_dept in r["departments"]:
+                        best_scores.append((r["departments"][best_dept].get("score", 0), r))
+                best_scores.sort(key=lambda x: x[0])
+                median_result = best_scores[len(best_scores) // 2][1]
+
                 candidate.quality_reasoning = (
                     f"Best fit: {best['department']} ({best.get('score', 0)}/100). "
                     f"{best.get('reasoning', '')} "
-                    f"{result.get('overall_reasoning', '')}"
+                    f"{median_result.get('overall_reasoning', '')}"
                 )
                 candidate.fit_breakdown = {
                     "skills_match": best.get("skills_match", 0),
                     "experience_relevance": best.get("experience_relevance", 0),
                     "potential": best.get("potential", 0),
+                }
+
+                # Record confidence from multi-pass
+                all_best_scores = [s[0] for s in best_scores]
+                candidate.score_confidence = {
+                    "min": min(all_best_scores),
+                    "max": max(all_best_scores),
+                    "median": candidate.quality_score,
+                    "range": max(all_best_scores) - min(all_best_scores),
+                    "passes": len(pass_results),
                 }
 
             candidate.status = CandidateStatus.RANKED
@@ -236,11 +299,13 @@ async def llm_judge(state: PipelineState) -> dict:
     for c in selected:
         c.status = CandidateStatus.SELECTED
 
-    print(f"[Phase 4] Scored {len(ranked)} candidates.")
+    print(f"[Phase 4] Scored {len(ranked)} candidates ({SCORING_PASSES}-pass median).")
     if selected:
         print(f"  Selected {len(selected)} of {top_k} target (top-k).")
         print(f"  Highest score:  {selected[0].quality_score} ({selected[0].best_fit_department})")
         print(f"  Cutoff score:   {selected[-1].quality_score} ({selected[-1].best_fit_department})")
+        avg_range = sum(c.score_confidence.get("range", 0) for c in selected) / max(len(selected), 1)
+        print(f"  Avg score range across passes: ±{avg_range/2:.1f} points")
     else:
         print("  No candidates were scored.")
     print(f"  {tracker.summary('LLM Judge')}")

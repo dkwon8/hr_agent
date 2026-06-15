@@ -55,12 +55,13 @@ class Candidate:
     graduation_verified: bool | None = None
 
     # LLM quality assessment
-    quality_score: float = 0.0  # best department score
+    quality_score: float = 0.0  # best department score (median of multi-pass)
     quality_reasoning: str = ""
     fit_breakdown: dict = field(default_factory=dict)
-    department_scores: dict = field(default_factory=dict)  # {dept_name: {score, reasoning, ...}}
+    department_scores: dict = field(default_factory=dict)
     best_fit_department: str = ""
     top_3_departments: list[dict] = field(default_factory=list)
+    score_confidence: dict = field(default_factory=dict)  # {min, max, median, range, passes}
 
     # Pipeline tracking
     status: CandidateStatus = CandidateStatus.PENDING
