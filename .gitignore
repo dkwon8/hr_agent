@@ -32,6 +32,9 @@ data/interview_schedule_*.csv
 data/feedback/feedback_history.json
 data/feedback/tuned_prompt.txt
 
+# Docs (personal reference)
+docs/
+
 # Claude
 .claude/
 

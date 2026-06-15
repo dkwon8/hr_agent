@@ -34,7 +34,17 @@ from mcp_servers.scoring.judge import (
     load_prompt,
     get_department_names,
 )
-from src.utils.helpers import load_job_requirements_from_dir
+
+
+def load_job_requirements_from_dir(directory: str) -> dict:
+    """Load the first .json file found in the job requirements directory."""
+    if not os.path.isdir(directory):
+        raise FileNotFoundError(f"Job requirements directory not found: {directory}")
+    json_files = [f for f in os.listdir(directory) if f.endswith(".json")]
+    if not json_files:
+        raise FileNotFoundError(f"No job requirements JSON found in {directory}")
+    with open(os.path.join(directory, json_files[0])) as f:
+        return json.load(f)
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("mcp").setLevel(logging.WARNING)
