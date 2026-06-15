@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 
 import httpx
 
-from config.settings import GITHUB_TOKEN
+import os
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 GITHUB_API = "https://api.github.com"
 
