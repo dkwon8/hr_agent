@@ -1,20 +1,12 @@
 """
-Phase 2 — Deterministic Filtering
+Deterministic filtering rules — location and graduation date checks.
 
-Pure rule-based filtering (no LLM):
-  1. Location check: candidate must be in one of the target locations
-  2. Graduation date check: must fall within the target window (i.e. junior standing)
-
-Candidates that fail get status=REJECTED with a reason.
-Candidates that pass get status=PASSED_DETERMINISTIC.
+Pure rule-based, no LLM needed, zero cost. Used by the Filter MCP server.
 """
 
 from __future__ import annotations
 
 import re
-
-from src.state import PipelineState, Candidate, CandidateStatus
-from src.utils.tracing import get_tracer
 
 
 def _normalize_location(location: str) -> str:
@@ -28,12 +20,12 @@ LOCATION_ALIASES = {
 }
 
 
-def _check_location(candidate: Candidate, target_locations: list[str]) -> str | None:
+def check_location(location: str, target_locations: list[str]) -> str | None:
     """Returns a rejection reason if location doesn't match, else None."""
-    if not candidate.location:
+    if not location:
         return "No location found on resume"
 
-    candidate_loc = _normalize_location(candidate.location)
+    candidate_loc = _normalize_location(location)
 
     for target in target_locations:
         target_clean = target.strip().lower()
@@ -46,73 +38,18 @@ def _check_location(candidate: Candidate, target_locations: list[str]) -> str | 
             if alias in candidate_loc:
                 return None
 
-    return f"Location '{candidate.location}' not in target areas: {target_locations}"
+    return f"Location '{location}' not in target areas: {target_locations}"
 
 
-def _check_graduation(
-    candidate: Candidate, earliest: str, latest: str
-) -> str | None:
+def check_graduation(graduation_date: str, earliest: str, latest: str) -> str | None:
     """Returns a rejection reason if graduation date is outside the window, else None."""
-    if not candidate.graduation_date:
+    if not graduation_date:
         return "No graduation date found on resume"
 
-    grad = candidate.graduation_date  # YYYY-MM format
+    if graduation_date < earliest:
+        return f"Graduation date {graduation_date} is before window start {earliest} (already graduated)"
 
-    if grad < earliest:
-        return f"Graduation date {grad} is before window start {earliest} (already graduated)"
-
-    if grad > latest:
-        return f"Graduation date {grad} is after window end {latest} (too early in program)"
+    if graduation_date > latest:
+        return f"Graduation date {graduation_date} is after window end {latest} (too early in program)"
 
     return None
-
-
-async def deterministic_filter(state: PipelineState) -> dict:
-    candidates = state["candidates"]
-    target_locations = state["target_locations"]
-    earliest = state["graduation_earliest"]
-    latest = state["graduation_latest"]
-
-    passed = 0
-    rejected = 0
-    errors = []
-
-    for candidate in candidates:
-        if candidate.status == CandidateStatus.REJECTED:
-            rejected += 1
-            continue
-
-        location_issue = _check_location(candidate, target_locations)
-        graduation_issue = _check_graduation(candidate, earliest, latest)
-
-        reasons = []
-        if location_issue:
-            reasons.append(location_issue)
-        if graduation_issue:
-            reasons.append(graduation_issue)
-
-        if reasons:
-            candidate.status = CandidateStatus.REJECTED
-            candidate.rejection_reason = "; ".join(reasons)
-            candidate.current_phase = "deterministic"
-            rejected += 1
-        else:
-            candidate.status = CandidateStatus.PASSED_DETERMINISTIC
-            candidate.current_phase = "deterministic"
-            passed += 1
-
-    print(f"[Phase 2] Deterministic filter: {passed} passed, {rejected} rejected")
-
-    tracer = get_tracer()
-    if tracer:
-        tracer.log_phase_metrics("deterministic", {
-            "passed": passed,
-            "rejected": rejected,
-            "rejection_rate": round(rejected / max(len(candidates), 1) * 100, 1),
-        })
-
-    return {
-        "candidates": candidates,
-        "current_phase": "deterministic_complete",
-        "errors": errors,
-    }
