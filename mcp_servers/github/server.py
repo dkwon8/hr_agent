@@ -35,7 +35,9 @@ from mcp_servers.github.client import (
     search_github_by_name,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("mcp").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("github_mcp")
 
 # ── Server Setup ──────────────────────────────────────────

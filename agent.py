@@ -23,12 +23,17 @@ you can ask follow-up questions like "Why was William rejected?" or
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+# Suppress noisy debug logs from MCP servers and HTTP requests
+logging.getLogger("mcp").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
@@ -90,7 +95,9 @@ GUIDELINES:
 def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
     """Create the orchestrator agent with all 5 MCP server connections."""
 
-    # Each MCP server runs as its own subprocess
+    # Each MCP server runs as its own subprocess.
+    # client_session_timeout_seconds=300 gives LLM calls enough time
+    # (default 5s is too short for resume parsing and scoring).
     mcp_servers = [
         MCPServerStdio(
             name="Resume MCP",
@@ -99,6 +106,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
                 "args": ["-m", "mcp_servers.resume.server"],
                 "cwd": PROJECT_ROOT,
             },
+            client_session_timeout_seconds=300,
         ),
         MCPServerStdio(
             name="Filter MCP",
@@ -107,6 +115,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
                 "args": ["-m", "mcp_servers.filter.server"],
                 "cwd": PROJECT_ROOT,
             },
+            client_session_timeout_seconds=300,
         ),
         MCPServerStdio(
             name="GitHub MCP",
@@ -115,6 +124,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
                 "args": ["-m", "mcp_servers.github.server"],
                 "cwd": PROJECT_ROOT,
             },
+            client_session_timeout_seconds=300,
         ),
         MCPServerStdio(
             name="Scoring MCP",
@@ -123,6 +133,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
                 "args": ["-m", "mcp_servers.scoring.server"],
                 "cwd": PROJECT_ROOT,
             },
+            client_session_timeout_seconds=300,
         ),
         MCPServerStdio(
             name="Output MCP",
@@ -131,6 +142,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
                 "args": ["-m", "mcp_servers.output.server"],
                 "cwd": PROJECT_ROOT,
             },
+            client_session_timeout_seconds=300,
         ),
     ]
 

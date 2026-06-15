@@ -42,7 +42,9 @@ from mcp_servers.resume.parser import (
     normalize_graduation_date,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("mcp").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("resume_mcp")
 
 # ── Server Setup ──────────────────────────────────────────
