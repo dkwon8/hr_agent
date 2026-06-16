@@ -39,6 +39,10 @@ docs/
 # Claude
 .claude/
 
+# Chainlit
+.chainlit/
+chainlit.md
+
 # Cursor
 .cursor/
 credentials/
