@@ -1,6 +1,6 @@
 # HR Recruitment Agent
 
-An AI-powered recruitment assistant built for Red Hat's Global Engineering internship program. It processes resumes from Google Drive, filters candidates by location and graduation date, validates GitHub profiles, scores applicants against 12 department requirements, and generates ranked reports — all through a conversational interface.
+An AI-powered recruitment assistant built for Red Hat's Global Engineering internship program. It processes resumes from Google Drive, filters candidates by location and graduation date, validates GitHub profiles when possible, scores applicants against 12 department requirements and job descriptions, and generates ranked reports.
 
 ## How It Works
 
@@ -14,7 +14,7 @@ The agent uses 5 MCP (Model Context Protocol) tool servers, each handling a diff
 | **Scoring** | Scores candidates against 12 departments using LLM-as-a-judge |
 | **Output** | Generates reports and sorts resumes into accepted/rejected folders |
 
-You can ask the agent to run the full pipeline, or use individual tools through natural language — for example, "parse the first resume" or "show me the top candidates for AI."
+You can ask the agent to run the full pipeline, or use individual tools through natural language. For example, "parse the first resume" or "show me the top candidates for the AI department."
 
 ## Quick Start
 
