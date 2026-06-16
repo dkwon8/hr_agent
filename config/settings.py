@@ -5,8 +5,6 @@ load_dotenv()
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
-LINKEDIN_API_KEY = os.getenv("LINKEDIN_API_KEY", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 TARGET_LOCATIONS = [
@@ -22,7 +20,6 @@ TOP_K_CANDIDATES = int(os.getenv("TOP_K_CANDIDATES", "100"))
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
 
-RESUME_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "resumes")
 JOB_REQUIREMENTS_DIR = os.path.join(
     os.path.dirname(__file__), "..", "data", "job_requirements"
 )
