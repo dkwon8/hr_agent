@@ -10,11 +10,11 @@ The agent uses 5 MCP (Model Context Protocol) tool servers, each handling a diff
 |--------|-------------|
 | **Resume** | Lists and parses resumes from Google Drive into structured candidate data |
 | **Filter** | Applies location and graduation date rules (no LLM cost) |
-| **GitHub** | Looks up and validates candidate GitHub profiles |
-| **Scoring** | Scores candidates against 12 departments using LLM-as-a-judge |
+| **GitHub** | Checks GitHub profiles as a bonus indicator of technical experience |
+| **Scoring** | Ranks accepted candidates by department fit for recruiter reference |
 | **Output** | Generates reports and sorts resumes into accepted/rejected folders |
 
-You can ask the agent to run the full pipeline, or use individual tools through natural language. For example, "parse the first resume" or "show me the top candidates for the AI department."
+You can ask the agent to run the full pipeline, or use individual tools through natural language. For example, "parse the first resume" or "show me the top candidates for the AI department." Also, candidates are accepted or rejected based on location and graduation only, which are key requirements for the hiring process for interns. Scoring/GitHub are additional context for the recruiter.
 
 ## Quick Start
 
