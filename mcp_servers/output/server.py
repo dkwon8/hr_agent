@@ -71,7 +71,7 @@ async def generate_report(
     candidates = json.loads(candidates_json)
 
     selected = sorted(
-        [c for c in candidates if c.get("status") in {"selected", "scored", "ranked"}],
+        [c for c in candidates if c.get("status") != "rejected"],
         key=lambda c: c.get("quality_score", 0),
         reverse=True,
     )
