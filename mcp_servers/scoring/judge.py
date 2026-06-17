@@ -176,11 +176,9 @@ async def score_with_median(
 
     Returns the candidate dict enriched with scoring results and confidence.
     """
-    pass_results = []
-    for _ in range(passes):
-        result = await score_single_candidate(candidate, job_requirements, llm, prompt)
-        if result and "departments" in result:
-            pass_results.append(result)
+    tasks = [score_single_candidate(candidate, job_requirements, llm, prompt) for _ in range(passes)]
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    pass_results = [r for r in raw_results if isinstance(r, dict) and "departments" in r]
 
     if not pass_results:
         return {**candidate, "status": "scoring_failed", "error": "All scoring passes failed"}
