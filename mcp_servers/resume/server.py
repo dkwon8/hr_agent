@@ -62,6 +62,8 @@ mcp = FastMCP(
 
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 GDRIVE_RESUME_FOLDER_ID = os.getenv("GDRIVE_RESUME_FOLDER_ID", "")
+GDRIVE_ACCEPTED_FOLDER_ID = os.getenv("GDRIVE_ACCEPTED_FOLDER_ID", "")
+GDRIVE_REJECTED_FOLDER_ID = os.getenv("GDRIVE_REJECTED_FOLDER_ID", "")
 
 # Local fallback directory
 LOCAL_RESUME_DIR = os.getenv(
@@ -159,6 +161,57 @@ async def list_resumes(
         return json.dumps({"source": "local", "count": len(file_list), "files": file_list})
 
     return json.dumps({"source": "none", "count": 0, "error": "No resume source configured"})
+
+
+@mcp.tool()
+async def list_sorted_resumes(
+    folder: str,
+) -> str:
+    """List resumes that have already been sorted into the accepted or rejected folder.
+
+    Use this when you need to access resumes after they've been moved from the
+    main folder. For example, to score candidates that were already filtered and sorted.
+
+    Args:
+        folder: Which folder to list — either "accepted" or "rejected"
+    """
+    drive = _get_drive_service()
+    if not drive:
+        return json.dumps({"error": "Google Drive not configured"})
+
+    folder_lower = folder.strip().lower()
+    if folder_lower == "accepted":
+        fid = GDRIVE_ACCEPTED_FOLDER_ID
+    elif folder_lower == "rejected":
+        fid = GDRIVE_REJECTED_FOLDER_ID
+    else:
+        return json.dumps({"error": f"Unknown folder '{folder}'. Use 'accepted' or 'rejected'."})
+
+    if not fid:
+        return json.dumps({"error": f"{folder} folder ID not set in .env"})
+
+    try:
+        results = drive.files().list(
+            q=f"'{fid}' in parents and mimeType='application/pdf' and trashed=false",
+            fields="files(id, name, size, modifiedTime, description)",
+            orderBy="name",
+        ).execute()
+
+        files = results.get("files", [])
+        file_list = [
+            {
+                "id": f["id"],
+                "name": f["name"],
+                "size_bytes": f.get("size", "unknown"),
+                "modified": f.get("modifiedTime", "unknown"),
+                "description": f.get("description", ""),
+            }
+            for f in files
+        ]
+        return json.dumps({"source": f"google_drive_{folder_lower}", "count": len(file_list), "files": file_list})
+
+    except Exception as e:
+        return json.dumps({"error": f"Failed to list {folder} folder: {e}"})
 
 
 @mcp.tool()
