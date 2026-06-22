@@ -26,18 +26,18 @@ You will receive:
 2. A candidate's resume information
 
 For EACH department, score the candidate on:
-- **skills_match** (0-40): How well do the candidate's skills align with this department's required skills? Evidence of actual use matters more than listing buzzwords.
-- **experience_relevance** (0-35): Do their projects/internships/contributions demonstrate capability relevant to this department?
-- **potential** (0-25): Growth trajectory, learning ability, and overall promise for this specific team.
+- **experience** (0-40): How well does the candidate's work experience demonstrate the required skills for this department? Evidence of actual use in jobs or internships matters more than listing buzzwords.
+- **projects** (0-35): Do their personal projects, open-source contributions, or academic projects demonstrate capability relevant to this department?
+- **learning_potential** (0-25): Growth trajectory, learning ability, and overall promise for this specific team.
 
 Return ONLY valid JSON with this structure:
 {
   "departments": {
     "<department_name>": {
       "score": <0-100 total>,
-      "skills_match": <0-40>,
-      "experience_relevance": <0-35>,
-      "potential": <0-25>,
+      "experience": <0-40>,
+      "projects": <0-35>,
+      "learning_potential": <0-25>,
       "reasoning": "1-2 sentence explanation"
     }
   },
@@ -213,9 +213,9 @@ async def score_with_median(
         scored_candidate["quality_score"] = best.get("score", 0)
         scored_candidate["top_3_departments"] = top_depts
         scored_candidate["fit_breakdown"] = {
-            "skills_match": best.get("skills_match", 0),
-            "experience_relevance": best.get("experience_relevance", 0),
-            "potential": best.get("potential", 0),
+            "experience": best.get("experience", 0),
+            "projects": best.get("projects", 0),
+            "learning_potential": best.get("learning_potential", 0),
         }
 
         # Get overall reasoning from the median pass

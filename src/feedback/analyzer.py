@@ -103,7 +103,7 @@ Return ONLY valid JSON:
   "summary": "1-2 sentence summary of all adjustments"
 }
 
-Make adjustments precise and measurable. Instead of "score harder", say "reduce skills_match by 5-8 points when the candidate lists the skill but has no project demonstrating it"."""
+Make adjustments precise and measurable. Instead of "score harder", say "reduce experience by 5-8 points when the candidate lists the skill but has no project demonstrating it"."""
 
 
 async def generate_prompt_adjustments(

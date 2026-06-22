@@ -59,9 +59,9 @@ def _build_accepted_description(c: dict) -> str:
         for i, d in enumerate(top_depts[:3], 1):
             lines.append(
                 f"  {i}. {d.get('department', '?')}: {d.get('score', '?')}/100 "
-                f"(Skills: {d.get('skills_match', '?')}/40, "
-                f"Experience: {d.get('experience_relevance', '?')}/35, "
-                f"Potential: {d.get('potential', '?')}/25)"
+                f"(Experience: {d.get('experience', '?')}/40, "
+                f"Projects: {d.get('projects', '?')}/35, "
+                f"Learning Potential: {d.get('learning_potential', '?')}/25)"
             )
             reasoning = d.get("reasoning", "")
             if reasoning:

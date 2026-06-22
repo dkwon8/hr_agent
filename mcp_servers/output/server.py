@@ -135,7 +135,7 @@ async def generate_report(
             text_lines.append(f"     {c.get('university', '')} | {c.get('major', '')} | Grad: {c.get('graduation_date', '')}")
 
             breakdown = c.get("fit_breakdown", {})
-            text_lines.append(f"     Skills: {breakdown.get('skills_match', '?')}/40 | Experience: {breakdown.get('experience_relevance', '?')}/35 | Potential: {breakdown.get('potential', '?')}/25")
+            text_lines.append(f"     Experience: {breakdown.get('experience', '?')}/40 | Projects: {breakdown.get('projects', '?')}/35 | Learning Potential: {breakdown.get('learning_potential', '?')}/25")
 
             dept_scores = c.get("department_scores", {}).get(best, {})
             reasoning = dept_scores.get("reasoning", "")

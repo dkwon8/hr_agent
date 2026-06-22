@@ -58,7 +58,7 @@ mcp = FastMCP(
     instructions=(
         "Provides LLM-as-a-Judge scoring for recruitment candidates. "
         "Scores candidates against 12 Red Hat Global Engineering departments "
-        "on skills match, experience relevance, and potential. "
+        "on experience, projects, and learning potential. "
         "Uses 3-pass median scoring for stable, reliable results."
     ),
 )
@@ -92,9 +92,9 @@ async def score_candidate(
     Returns department scores, best fit, top 3 departments, and confidence range.
 
     Scoring dimensions per department:
-    - skills_match (0-40): evidence of required skills
-    - experience_relevance (0-35): relevant work/project experience
-    - potential (0-25): growth trajectory and learning signals
+    - experience (0-40): evidence of required skills in work experience
+    - projects (0-35): relevant personal/academic/open-source projects
+    - learning_potential (0-25): growth trajectory and learning signals
 
     Args:
         candidate_json: JSON string with candidate data (name, skills, experience, etc.)
