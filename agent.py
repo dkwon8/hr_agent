@@ -35,6 +35,13 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 logging.getLogger("mcp").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+import mlflow
+
+os.environ.setdefault("MLFLOW_TRACKING_URI", "http://localhost:5001")
+os.environ.setdefault("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+
+mlflow.openai.autolog()
+
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
 
@@ -174,6 +181,7 @@ async def run_single(prompt: str) -> str:
             await stack.enter_async_context(server)
 
         result = await Runner.run(agent, prompt)
+        mlflow.flush_trace_async_logging()
         return result.final_output
 
 
@@ -214,8 +222,8 @@ async def run_interactive():
 
             # Run agent with full conversation history
             result = await Runner.run(agent, messages)
+            mlflow.flush_trace_async_logging()
 
-            # Add agent response to history
             response = result.final_output
             messages.append({"role": "assistant", "content": response})
 
