@@ -13,8 +13,11 @@ copied to Unfiltered/ before being moved and modified.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
+
+logger = logging.getLogger("output_mcp")
 
 
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
@@ -250,12 +253,31 @@ def sort_and_upload(candidates: list[dict]) -> dict:
             original_name = current.get("name", "")
             current_parents = ",".join(current.get("parents", []))
 
-            # Copy original to Unfiltered before moving
+            # Copy original to Unfiltered before modifying
             service.files().copy(
                 fileId=file_id,
                 body={"name": original_name, "parents": [unfiltered_folder_id]},
                 fields="id",
             ).execute()
+
+            # Append PDF summary page
+            try:
+                from mcp_servers.output.pdf_summary import (
+                    create_accepted_page, create_rejected_page, append_summary_to_pdf,
+                )
+                from googleapiclient.http import MediaInMemoryUpload
+
+                pdf_bytes = service.files().get_media(fileId=file_id).execute()
+                if status == "rejected":
+                    summary_doc = create_rejected_page(c)
+                else:
+                    summary_doc = create_accepted_page(c)
+                modified_pdf = append_summary_to_pdf(pdf_bytes, summary_doc)
+
+                media = MediaInMemoryUpload(modified_pdf, mimetype="application/pdf")
+                service.files().update(fileId=file_id, media_body=media).execute()
+            except Exception as pdf_err:
+                logger.warning(f"PDF append failed for {c.get('name', '?')}: {pdf_err}")
 
             candidate_name = c.get("name", "")
             if candidate_name:
