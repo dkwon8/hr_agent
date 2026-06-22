@@ -176,14 +176,23 @@ async def sort_resumes(
     candidates = json.loads(candidates_json)
     results = sort_and_upload(candidates)
 
-    return json.dumps({
+    if "error" in results:
+        return json.dumps(results)
+
+    is_drive = "run_folder_id" in results
+    response = {
         "accepted": len(results.get("accepted", [])),
         "rejected": len(results.get("rejected", [])),
         "errors": results.get("errors", []),
-        "destination": "google_drive" if os.getenv("GDRIVE_ACCEPTED_FOLDER_ID") else "local",
+        "destination": "google_drive" if is_drive else "local",
+        "run_folder": results.get("run_folder", ""),
         "accepted_details": results.get("accepted", []),
         "rejected_details": results.get("rejected", []),
-    })
+    }
+    if is_drive:
+        response["run_folder_id"] = results["run_folder_id"]
+
+    return json.dumps(response)
 
 
 # ── Entry Point ───────────────────────────────────────────

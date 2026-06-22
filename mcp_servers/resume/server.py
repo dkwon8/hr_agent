@@ -197,6 +197,7 @@ async def list_resumes(
 @mcp.tool()
 async def list_sorted_resumes(
     folder: str,
+    folder_id: Optional[str] = None,
 ) -> str:
     """List resumes that have already been sorted into the accepted or rejected folder.
 
@@ -205,21 +206,24 @@ async def list_sorted_resumes(
 
     Args:
         folder: Which folder to list — either "accepted" or "rejected"
+        folder_id: Google Drive folder ID to list from (optional, overrides default)
     """
     drive = _get_drive_service()
     if not drive:
         return json.dumps({"error": "Google Drive not configured"})
 
     folder_lower = folder.strip().lower()
-    if folder_lower == "accepted":
+    if folder_id:
+        fid = folder_id
+    elif folder_lower == "accepted":
         fid = GDRIVE_ACCEPTED_FOLDER_ID
     elif folder_lower == "rejected":
         fid = GDRIVE_REJECTED_FOLDER_ID
     else:
-        return json.dumps({"error": f"Unknown folder '{folder}'. Use 'accepted' or 'rejected'."})
+        return json.dumps({"error": f"Unknown folder '{folder}'. Use 'accepted' or 'rejected', or provide a folder_id."})
 
     if not fid:
-        return json.dumps({"error": f"{folder} folder ID not set in .env"})
+        return json.dumps({"error": f"{folder} folder ID not set. Provide a folder_id or set the env var."})
 
     try:
         results = drive.files().list(
