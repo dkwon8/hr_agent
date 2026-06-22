@@ -26,7 +26,8 @@ mlruns/
 mlflow.db
 mlartifacts/
 
-# Data artifacts (keep structure, ignore generated reports)
+# Data artifacts (keep structure, ignore generated files)
+data/parsed_candidates.json
 data/report_*.json
 data/interview_schedule_*.csv
 data/feedback/feedback_history.json

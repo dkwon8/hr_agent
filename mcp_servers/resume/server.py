@@ -71,8 +71,39 @@ LOCAL_RESUME_DIR = os.getenv(
     os.path.join(os.path.dirname(__file__), "..", "..", "data", "resumes"),
 )
 
-# In-memory cache of parsed candidates for search
-_parsed_candidates: list[dict] = []
+# ── Persistent Cache ─────────────────────────────────────
+
+CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "parsed_candidates.json")
+
+_cache: dict[str, dict] = {}  # keyed by file_id
+_parsed_candidates: list[dict] = []  # flat list for search_candidates
+
+
+def _load_cache():
+    """Load previously parsed candidates from disk."""
+    global _cache, _parsed_candidates
+    if os.path.exists(CACHE_PATH):
+        try:
+            with open(CACHE_PATH) as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                _cache = data
+            elif isinstance(data, list):
+                _cache = {c["file_id"]: c for c in data if "file_id" in c}
+            _parsed_candidates = list(_cache.values())
+        except (json.JSONDecodeError, KeyError):
+            _cache = {}
+            _parsed_candidates = []
+
+
+def _save_cache():
+    """Persist the cache to disk."""
+    os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+    with open(CACHE_PATH, "w") as f:
+        json.dump(_cache, f, indent=2)
+
+
+_load_cache()
 
 
 def _get_drive_service():
@@ -262,6 +293,7 @@ async def read_resume(
 async def parse_resume(
     file_id: str,
     candidate_id: Optional[str] = None,
+    force_refresh: bool = False,
 ) -> str:
     """Parse a single resume into structured candidate data using LLM.
 
@@ -269,10 +301,22 @@ async def parse_resume(
     university, major, skills, experience summary, education summary,
     LinkedIn URL, GitHub URL, portfolio URL.
 
+    Uses a persistent cache — previously parsed resumes are returned instantly
+    without calling the LLM again. Use force_refresh=True to re-parse.
+
     Args:
         file_id: Google Drive file ID or local filename
         candidate_id: Optional ID to assign to the candidate
+        force_refresh: If True, re-parse even if cached
     """
+    if not force_refresh and file_id in _cache:
+        cached = _cache[file_id]
+        if candidate_id:
+            cached["id"] = candidate_id
+        if cached not in _parsed_candidates:
+            _parsed_candidates.append(cached)
+        return json.dumps(cached)
+
     # Get the raw text first
     raw_result = json.loads(await read_resume(file_id))
     if "error" in raw_result:
@@ -309,8 +353,11 @@ async def parse_resume(
             "status": "parsed",
         }
 
-        # Cache for search
-        _parsed_candidates.append(candidate)
+        _cache[file_id] = candidate
+        _save_cache()
+
+        if candidate not in _parsed_candidates:
+            _parsed_candidates.append(candidate)
 
         return json.dumps(candidate)
 
@@ -326,18 +373,17 @@ async def parse_resume(
 @mcp.tool()
 async def parse_all_resumes(
     folder_id: Optional[str] = None,
+    force_refresh: bool = False,
 ) -> str:
     """Parse all resumes in a folder into structured candidate data.
 
-    Processes in batches of 10 for efficiency. Returns a summary with
-    all parsed candidates.
+    Uses a persistent cache — previously parsed resumes are skipped unless
+    force_refresh is True. Only new/uncached resumes are sent to the LLM.
 
     Args:
         folder_id: Google Drive folder ID (optional, uses default from .env)
+        force_refresh: If True, re-parse all resumes even if cached
     """
-    global _parsed_candidates
-    _parsed_candidates = []
-
     listing = json.loads(await list_resumes(folder_id))
     files = listing.get("files", [])
 
@@ -350,13 +396,14 @@ async def parse_all_resumes(
 
     results = []
     errors = []
+    cached_count = 0
 
     # Process in batches
     batch_size = 10
     for i in range(0, len(files), batch_size):
         batch = files[i:i + batch_size]
         tasks = [
-            parse_resume(f["id"], f"candidate_{i+j:04d}")
+            parse_resume(f["id"], f"candidate_{i+j:04d}", force_refresh=force_refresh)
             for j, f in enumerate(batch)
         ]
         batch_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -371,8 +418,13 @@ async def parse_all_resumes(
                 else:
                     results.append(parsed)
 
+    if not force_refresh:
+        cached_count = sum(1 for f in files if f["id"] in _cache)
+
     return json.dumps({
         "count": len(results),
+        "cached": cached_count,
+        "freshly_parsed": len(results) - cached_count,
         "errors": len(errors),
         "candidates": results,
         "error_details": errors if errors else [],
