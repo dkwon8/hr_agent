@@ -20,11 +20,34 @@ logging.getLogger("mcp").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 import chainlit as cl
+from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 
 from agent import create_agent
 
 import mlflow
 from agents import Runner
+from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
+
+
+TOOL_LABELS = {
+    "list_resumes": "Listing resumes from Google Drive",
+    "list_sorted_resumes": "Listing sorted resumes",
+    "read_resume": "Reading resume PDF",
+    "parse_resume": "Parsing resume with LLM",
+    "parse_all_resumes": "Parsing all resumes",
+    "search_candidates": "Searching candidates",
+    "check_candidate_location": "Checking candidate location",
+    "check_candidate_graduation": "Checking graduation date",
+    "filter_candidates": "Filtering candidates",
+    "lookup_profile": "Looking up GitHub profile",
+    "discover_profile": "Searching for GitHub profile",
+    "check_authenticity": "Checking GitHub authenticity",
+    "score_candidate": "Scoring candidate against departments",
+    "score_all_candidates": "Scoring all candidates",
+    "get_department_requirements": "Loading department requirements",
+    "generate_report": "Generating pipeline report",
+    "sort_resumes": "Sorting resumes into folders",
+}
 
 
 @cl.on_chat_start
@@ -59,9 +82,42 @@ async def on_message(message: cl.Message):
     msg = cl.Message(content="")
     await msg.send()
 
-    result = await Runner.run(agent, messages)
-    response = result.final_output
+    result = Runner.run_streamed(agent, messages)
+    active_steps = {}
 
+    async for event in result.stream_events():
+        if isinstance(event, RawResponsesStreamEvent):
+            if isinstance(event.data, ResponseTextDeltaEvent):
+                await msg.stream_token(event.data.delta)
+
+        elif isinstance(event, RunItemStreamEvent):
+            if event.name == "tool_called":
+                raw = event.item.raw_item
+                tool_name = getattr(raw, "name", "") or ""
+                call_id = getattr(raw, "call_id", "") or tool_name
+                label = TOOL_LABELS.get(tool_name, f"Running {tool_name}")
+
+                step = cl.Step(name=label, type="tool")
+                step.input = tool_name
+                await step.send()
+                active_steps[call_id] = step
+
+            elif event.name == "tool_output":
+                raw = event.item.raw_item
+                call_id = getattr(raw, "call_id", "")
+                step = active_steps.pop(call_id, None)
+                if step:
+                    output = getattr(raw, "output", "")
+                    if len(output) > 500:
+                        step.output = output[:500] + "..."
+                    else:
+                        step.output = output
+                    await step.update()
+
+    for step in active_steps.values():
+        await step.update()
+
+    response = result.final_output
     messages.append({"role": "assistant", "content": response})
     cl.user_session.set("messages", messages)
 
