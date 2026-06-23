@@ -1,13 +1,10 @@
 """
 Resume sorting — moves resumes into accepted/rejected folders on Google Drive.
 
-Candidates who pass the deterministic filter (location + graduation) are moved
-to the Accepted folder. Candidates who fail are moved to the Rejected folder.
-Scoring and GitHub details are attached as the file's description in Drive.
-
-Each pipeline run creates a timestamped folder (e.g. Run_2026-06-22_14-30)
-with Accepted/, Rejected/, and Unfiltered/ subfolders. Original resumes are
-copied to Unfiltered/ before being moved and modified.
+Resumes start in the Unfiltered folder. Each pipeline run creates a timestamped
+folder (e.g. Run_2026-06-23_14-30) with Accepted/ and Rejected/ subfolders.
+Resumes are moved from Unfiltered into the appropriate subfolder with a PDF
+summary page appended.
 """
 
 from __future__ import annotations
@@ -56,23 +53,33 @@ def _create_drive_folder(service, name: str, parent_id: str) -> str:
     return folder["id"]
 
 
+def _find_or_create_folder(service, name: str, parent_id: str) -> str:
+    """Find a folder by name under a parent, or create it if it doesn't exist."""
+    results = service.files().list(
+        q=f"'{parent_id}' in parents and name='{name}' "
+          f"and mimeType='application/vnd.google-apps.folder' and trashed=false",
+        fields="files(id)",
+    ).execute()
+    files = results.get("files", [])
+    if files:
+        return files[0]["id"]
+    return _create_drive_folder(service, name, parent_id)
+
+
 def _create_run_folders(service, parent_folder_id: str) -> dict:
-    """Create a timestamped run folder with Accepted/Rejected/Unfiltered subfolders."""
+    """Create a timestamped run folder with Accepted/Rejected subfolders."""
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     run_name = f"Run_{timestamp}"
 
     run_folder_id = _create_drive_folder(service, run_name, parent_folder_id)
-
     accepted_id = _create_drive_folder(service, "Accepted", run_folder_id)
     rejected_id = _create_drive_folder(service, "Rejected", run_folder_id)
-    unfiltered_id = _create_drive_folder(service, "Unfiltered", run_folder_id)
 
     return {
         "run_name": run_name,
         "run_folder_id": run_folder_id,
         "accepted_folder_id": accepted_id,
         "rejected_folder_id": rejected_id,
-        "unfiltered_folder_id": unfiltered_id,
     }
 
 
@@ -216,7 +223,6 @@ def sort_and_upload(candidates: list[dict]) -> dict:
 
     accepted_folder_id = run_folders["accepted_folder_id"]
     rejected_folder_id = run_folders["rejected_folder_id"]
-    unfiltered_folder_id = run_folders["unfiltered_folder_id"]
 
     candidates = sorted(
         candidates,
@@ -252,13 +258,6 @@ def sort_and_upload(candidates: list[dict]) -> dict:
             ).execute()
             original_name = current.get("name", "")
             current_parents = ",".join(current.get("parents", []))
-
-            # Copy original to Unfiltered before modifying
-            service.files().copy(
-                fileId=file_id,
-                body={"name": original_name, "parents": [unfiltered_folder_id]},
-                fields="id",
-            ).execute()
 
             # Append PDF summary page
             try:

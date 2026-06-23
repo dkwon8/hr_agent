@@ -24,9 +24,79 @@ from openai.types.responses.response_text_delta_event import ResponseTextDeltaEv
 
 from agent import create_agent
 
-import mlflow
 from agents import Runner
 from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
+
+
+def _log_scoring_assessments(trace_id: str):
+    """Log candidate scoring data as MLflow assessments from the most recent report."""
+    import glob
+    import json
+    import mlflow
+    from mlflow.entities import Feedback, AssessmentSource, AssessmentSourceType
+
+    report_dir = os.path.join(os.path.dirname(__file__), "data")
+    reports = sorted(glob.glob(os.path.join(report_dir, "report_*.json")))
+    if not reports:
+        return
+
+    with open(reports[-1]) as f:
+        report = json.load(f)
+
+    source = AssessmentSource(
+        source_type=AssessmentSourceType.LLM_JUDGE,
+        source_id="scoring-mcp",
+    )
+
+    selected = report.get("selected_candidates", [])
+    rejected = report.get("rejected_candidates", [])
+
+    if not selected and not rejected:
+        return
+
+    summary = report.get("summary", {})
+    mlflow.log_assessment(trace_id, Feedback(
+        name="pipeline_summary",
+        value=f"{summary.get('total_selected', 0)} accepted, {summary.get('total_rejected', 0)} rejected",
+        rationale=f"Top score: {summary.get('top_score', 'N/A')}/100",
+        source=source,
+    ))
+
+    for c in selected:
+        name = c.get("name", "Unknown")
+        score = c.get("quality_score", 0)
+        best_dept = c.get("best_fit_department", "N/A")
+        breakdown = c.get("fit_breakdown", {})
+        confidence = c.get("score_confidence", {})
+        top_3 = c.get("top_3_departments", [])
+
+        top_3_str = ", ".join(
+            f"{d.get('department', '?')}: {d.get('score', '?')}"
+            for d in top_3
+        )
+
+        mlflow.log_assessment(trace_id, Feedback(
+            name=f"candidate_{name.replace(' ', '_').lower()}",
+            value=score,
+            rationale=(
+                f"Best fit: {best_dept} | "
+                f"Experience: {breakdown.get('experience', '?')}/40, "
+                f"Projects: {breakdown.get('projects', '?')}/35, "
+                f"Learning Potential: {breakdown.get('learning_potential', '?')}/25 | "
+                f"Confidence: {confidence.get('min', '?')}-{confidence.get('max', '?')} | "
+                f"Top 3: {top_3_str}"
+            ),
+            source=source,
+        ))
+
+    for c in rejected:
+        name = c.get("name", "Unknown")
+        mlflow.log_assessment(trace_id, Feedback(
+            name=f"rejected_{name.replace(' ', '_').lower()}",
+            value=0,
+            rationale=c.get("rejection_reason", "No reason"),
+            source=source,
+        ))
 
 
 TOOL_LABELS = {
@@ -83,48 +153,56 @@ async def on_message(message: cl.Message):
     await msg.send()
 
     result = Runner.run_streamed(agent, messages)
-    active_steps = {}
+    streaming_started = False
+    tool_status_lines = []
 
     async for event in result.stream_events():
         if isinstance(event, RawResponsesStreamEvent):
             if isinstance(event.data, ResponseTextDeltaEvent):
+                if not streaming_started:
+                    streaming_started = True
+                    msg.content = ""
+                    await msg.update()
                 await msg.stream_token(event.data.delta)
 
         elif isinstance(event, RunItemStreamEvent):
             if event.name == "tool_called":
                 raw = event.item.raw_item
                 tool_name = getattr(raw, "name", "") or ""
-                call_id = getattr(raw, "call_id", "") or tool_name
                 label = TOOL_LABELS.get(tool_name, f"Running {tool_name}")
-
-                step = cl.Step(name=label, type="tool")
-                step.input = tool_name
-                await step.send()
-                active_steps[call_id] = step
+                tool_status_lines.append(f"⏳ {label}...")
+                msg.content = "\n".join(tool_status_lines)
+                await msg.update()
 
             elif event.name == "tool_output":
-                raw = event.item.raw_item
-                call_id = getattr(raw, "call_id", "")
-                step = active_steps.pop(call_id, None)
-                if step:
-                    output = getattr(raw, "output", "")
-                    if len(output) > 500:
-                        step.output = output[:500] + "..."
-                    else:
-                        step.output = output
-                    await step.update()
-
-    for step in active_steps.values():
-        await step.update()
+                if tool_status_lines:
+                    tool_status_lines[-1] = tool_status_lines[-1].replace("⏳", "✅")
+                    msg.content = "\n".join(tool_status_lines)
+                    await msg.update()
 
     response = result.final_output
     messages.append({"role": "assistant", "content": response})
     cl.user_session.set("messages", messages)
 
-    msg.content = response
+    if not streaming_started:
+        msg.content = response
     await msg.update()
 
-    mlflow.flush_trace_async_logging()
+    try:
+        import mlflow
+
+        mlflow.flush_trace_async_logging()
+
+        exp = mlflow.get_experiment_by_name(
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+        )
+        if exp:
+            traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=1)
+            if len(traces) > 0:
+                trace_id = traces.iloc[0]["trace_id"]
+                _log_scoring_assessments(trace_id)
+    except Exception:
+        pass
 
 
 @cl.on_chat_end

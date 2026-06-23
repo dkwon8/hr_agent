@@ -35,12 +35,52 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 logging.getLogger("mcp").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-import mlflow
+# MLflow tracing — only enable if the tracking server is reachable.
+# MLflow's OpenAI autolog doesn't map all OpenAI Agents SDK span types,
+# so "task", "turn", and "mcp_tools" spans show up as "Unknown". We patch
+# the span type map and name function to fix this.
+try:
+    import urllib.request
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+    urllib.request.urlopen(tracking_uri, timeout=2)
+    os.environ.setdefault("MLFLOW_TRACKING_URI", tracking_uri)
+    os.environ.setdefault("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+    import mlflow
+    from mlflow.entities import SpanType
+    from mlflow.openai import _agent_tracer
 
-os.environ.setdefault("MLFLOW_TRACKING_URI", "http://localhost:5001")
-os.environ.setdefault("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+    _agent_tracer._SPAN_TYPE_MAP.update({
+        "task": SpanType.TASK,
+        "turn": SpanType.CHAIN,
+        "custom": SpanType.CHAIN,
+        "mcp_tools": SpanType.TOOL,
+        "transcription": SpanType.CHAIN,
+        "speech": SpanType.CHAIN,
+        "speech_group": SpanType.CHAIN,
+    })
 
-mlflow.openai.autolog()
+    _original_get_span_name = _agent_tracer._get_span_name
+
+    def _patched_get_span_name(span_data):
+        name_map = {
+            "task": "Agent Task",
+            "turn": "Agent Turn",
+            "mcp_tools": "MCP Tool Discovery",
+            "custom": "Custom",
+            "transcription": "Transcription",
+            "speech": "Speech",
+            "speech_group": "Speech Group",
+        }
+        span_type = getattr(span_data, "type", None)
+        if span_type in name_map:
+            return name_map[span_type]
+        return _original_get_span_name(span_data)
+
+    _agent_tracer._get_span_name = _patched_get_span_name
+
+    mlflow.openai.autolog()
+except Exception:
+    pass
 
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
@@ -181,7 +221,10 @@ async def run_single(prompt: str) -> str:
             await stack.enter_async_context(server)
 
         result = await Runner.run(agent, prompt)
-        mlflow.flush_trace_async_logging()
+        try:
+            mlflow.flush_trace_async_logging()
+        except Exception:
+            pass
         return result.final_output
 
 
@@ -222,7 +265,10 @@ async def run_interactive():
 
             # Run agent with full conversation history
             result = await Runner.run(agent, messages)
-            mlflow.flush_trace_async_logging()
+            try:
+                mlflow.flush_trace_async_logging()
+            except Exception:
+                pass
 
             response = result.final_output
             messages.append({"role": "assistant", "content": response})

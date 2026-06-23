@@ -155,7 +155,16 @@ async def score_single_candidate(
         )),
     ])
 
-    return parse_llm_json(response.content)
+    result = parse_llm_json(response.content)
+    if result and "departments" in result:
+        for dept_scores in result["departments"].values():
+            dept_scores["experience"] = min(dept_scores.get("experience", 0), 40)
+            dept_scores["projects"] = min(dept_scores.get("projects", 0), 35)
+            dept_scores["learning_potential"] = min(dept_scores.get("learning_potential", 0), 25)
+            dept_scores["score"] = (
+                dept_scores["experience"] + dept_scores["projects"] + dept_scores["learning_potential"]
+            )
+    return result
 
 
 def extract_top_departments(dept_scores: dict, top_n: int = 3) -> list[dict]:
