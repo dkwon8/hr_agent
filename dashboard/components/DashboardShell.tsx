@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import RunSelector from "./RunSelector";
 
@@ -23,9 +24,12 @@ export function useRun() {
 const API_BASE = "http://localhost:8001";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [selectedRun, setSelectedRun] = useState("");
   const [reportData, setReportData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const skipRunRequired = pathname === "/traces";
 
   const handleRunChange = (runId: string) => {
     setSelectedRun(runId);
@@ -49,7 +53,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div className="flex items-center justify-center h-64">
               <p className="text-gray-400">Loading pipeline data...</p>
             </div>
-          ) : !reportData ? (
+          ) : !reportData && !skipRunRequired ? (
             <div className="flex items-center justify-center h-64">
               <p className="text-gray-400">Select a pipeline run to view results</p>
             </div>

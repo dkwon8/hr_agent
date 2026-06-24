@@ -111,9 +111,10 @@ def list_traces():
                     if trace and trace.data.spans:
                         root = trace.data.spans[0]
                         if root.inputs and isinstance(root.inputs, list):
-                            for msg in root.inputs:
+                            for msg in reversed(root.inputs):
                                 if isinstance(msg, dict) and msg.get("role") == "user":
-                                    request_preview = msg.get("content", "")[-1] if isinstance(msg.get("content"), list) else msg.get("content", "")
+                                    content = msg.get("content", "")
+                                    request_preview = content[-1] if isinstance(content, list) else content
                                     break
                 except Exception:
                     pass
