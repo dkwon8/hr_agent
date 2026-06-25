@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import re
 import sys
 
 from dotenv import load_dotenv
@@ -114,9 +115,13 @@ TOOL_LABELS = {
     "check_authenticity": "Checking GitHub authenticity",
     "score_candidate": "Scoring candidate against departments",
     "score_all_candidates": "Scoring all candidates",
+    "score_candidate_for_role": "Scoring candidate for custom role",
+    "score_all_for_role": "Scoring all candidates for custom role",
     "get_department_requirements": "Loading department requirements",
     "generate_report": "Generating pipeline report",
     "sort_resumes": "Sorting resumes into folders",
+    "web_search": "Searching the web",
+    "fetch_job_posting": "Fetching job posting from Workday",
 }
 
 
@@ -137,7 +142,10 @@ async def on_chat_start():
             "**Red Hat — HR Recruitment Agent**\n\n"
             "I can help you process resumes, filter candidates, "
             "validate GitHub profiles, score applicants, and generate reports.\n\n"
-            "Try: *\"List the resumes\"* or *\"Run the full pipeline\"*"
+            "Try:\n"
+            "- *\"Run the full pipeline\"* — use default GE intern requirements\n"
+            "- *\"Evaluate resumes for [Workday URL]\"* — fetch requirements from a job posting\n"
+            "- *\"List the resumes\"* — see available resumes"
         )
     ).send()
 
@@ -180,16 +188,22 @@ async def on_message(message: cl.Message):
                     msg.content = "\n".join(tool_status_lines)
                     await msg.update()
 
-    response = result.final_output
+    response = re.sub(r"\s*(?:citeturn|turn)\d+\S*", "", result.final_output, flags=re.IGNORECASE).rstrip()
     messages.append({"role": "assistant", "content": response})
     cl.user_session.set("messages", messages)
 
     if not streaming_started:
         msg.content = response
+    else:
+        msg.content = re.sub(r"\s*(?:citeturn|turn)\d+\S*", "", msg.content, flags=re.IGNORECASE).rstrip()
     await msg.update()
 
     try:
         import mlflow
+        import urllib.request
+
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+        urllib.request.urlopen(tracking_uri, timeout=2)
 
         mlflow.flush_trace_async_logging()
 

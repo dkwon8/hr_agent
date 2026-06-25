@@ -169,6 +169,167 @@ async def score_all_candidates(
 
 
 @mcp.tool()
+async def score_candidate_for_role(
+    candidate_json: str,
+    role_requirements_json: str,
+) -> str:
+    """Score a single candidate against custom role requirements (dynamic mode).
+
+    Use this instead of score_candidate when the user has provided specific
+    job requirements (e.g., from a Workday link) rather than using the default
+    12 GE departments.
+
+    Args:
+        candidate_json: JSON string with candidate data (name, skills, experience, etc.)
+        role_requirements_json: JSON string with role requirements. Expected format:
+            {
+                "role_title": "Senior Software Engineer",
+                "organization": "Red Hat",
+                "required_skills": ["Python", "Kubernetes", "Linux"],
+                "preferred_skills": ["Go", "CI/CD"],
+                "qualifications": ["Bachelor's in CS", "3+ years experience"]
+            }
+    """
+    candidate = json.loads(candidate_json)
+    role_requirements = json.loads(role_requirements_json)
+    llm = _get_llm()
+
+    job_requirements = _build_dynamic_job_requirements(role_requirements)
+    prompt = _build_dynamic_scoring_prompt(role_requirements)
+
+    result = await score_with_median(candidate, job_requirements, llm, prompt, passes=3)
+
+    return json.dumps(result)
+
+
+@mcp.tool()
+async def score_all_for_role(
+    candidates_json: str,
+    role_requirements_json: str,
+    top_k: int = 100,
+) -> str:
+    """Score a list of candidates against custom role requirements (dynamic mode).
+
+    Use this instead of score_all_candidates when evaluating against specific
+    job requirements from a Workday link or user-specified criteria.
+
+    Args:
+        candidates_json: JSON string with list of candidate dicts
+        role_requirements_json: JSON string with role requirements (same format as score_candidate_for_role)
+        top_k: Number of top candidates to select (default: 100)
+    """
+    candidates = json.loads(candidates_json)
+    role_requirements = json.loads(role_requirements_json)
+    llm = _get_llm()
+
+    job_requirements = _build_dynamic_job_requirements(role_requirements)
+    prompt = _build_dynamic_scoring_prompt(role_requirements)
+
+    scored = []
+    errors = []
+
+    batch_size = 10
+    for i in range(0, len(candidates), batch_size):
+        batch = candidates[i:i + batch_size]
+        tasks = [score_with_median(c, job_requirements, llm, prompt, passes=3) for c in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for c, result in zip(batch, results):
+            if isinstance(result, Exception):
+                errors.append({"candidate": c.get("name", c.get("id", "?")), "error": str(result)})
+            elif result.get("status") == "scoring_failed":
+                errors.append({"candidate": c.get("name", "?"), "error": result.get("error", "unknown")})
+            else:
+                scored.append(result)
+
+    ranked = sorted(scored, key=lambda c: c.get("quality_score", 0), reverse=True)
+
+    selected = ranked[:top_k]
+    for c in selected:
+        c["status"] = "selected"
+    for c in ranked[top_k:]:
+        c["status"] = "ranked"
+
+    return json.dumps({
+        "total_scored": len(ranked),
+        "selected": len(selected),
+        "errors": len(errors),
+        "top_score": selected[0]["quality_score"] if selected else None,
+        "cutoff_score": selected[-1]["quality_score"] if selected else None,
+        "candidates": ranked,
+        "error_details": errors,
+    })
+
+
+def _build_dynamic_job_requirements(role_requirements: dict) -> dict:
+    """Convert user-provided role requirements into the job_requirements format
+    expected by the scoring judge."""
+    role_title = role_requirements.get("role_title", "Role")
+    required_skills = role_requirements.get("required_skills", [])
+    preferred_skills = role_requirements.get("preferred_skills", [])
+    all_skills = required_skills + [s for s in preferred_skills if s not in required_skills]
+
+    return {
+        "organization": role_requirements.get("organization", ""),
+        "role": role_title,
+        "departments": {
+            role_title: {
+                "name": role_title,
+                "required_skills": all_skills,
+            }
+        },
+        "general_qualifications": role_requirements.get("qualifications", []),
+    }
+
+
+def _build_dynamic_scoring_prompt(role_requirements: dict) -> str:
+    """Build a scoring prompt adapted to the specific role requirements."""
+    role_title = role_requirements.get("role_title", "the role")
+    org = role_requirements.get("organization", "the organization")
+    qualifications = role_requirements.get("qualifications", [])
+
+    quals_text = ""
+    if qualifications:
+        quals_text = "\n".join(f"- {q}" for q in qualifications)
+        quals_text = f"\n\nKey qualifications for this role:\n{quals_text}"
+
+    return f"""You are a senior recruiter at {org} evaluating candidates for the role: {role_title}.
+
+You will receive:
+1. The role and its required skills
+2. A candidate's resume information
+
+Score the candidate on their fit for this specific role:
+- **experience** (0-40): How well does the candidate's work experience demonstrate the required skills? Evidence of actual use in jobs or internships matters more than listing buzzwords.
+- **projects** (0-35): Do their personal projects, open-source contributions, or academic projects demonstrate capability relevant to this role?
+- **learning_potential** (0-25): Growth trajectory, learning ability, and overall promise for this role.
+{quals_text}
+
+Return ONLY valid JSON with this structure:
+{{
+  "departments": {{
+    "{role_title}": {{
+      "score": <0-100 total>,
+      "experience": <0-40>,
+      "projects": <0-35>,
+      "learning_potential": <0-25>,
+      "reasoning": "1-2 sentence explanation"
+    }}
+  }},
+  "overall_reasoning": "2-3 sentences on the candidate's general strengths and weaknesses for this role"
+}}
+
+Scoring guidelines:
+- 0-30: Poor fit — missing most required skills, no relevant experience
+- 31-50: Weak fit — some overlap but significant gaps
+- 51-70: Moderate fit — has several required skills with some evidence
+- 71-85: Strong fit — clear alignment with demonstrated experience
+- 86-100: Exceptional fit — deep expertise with strong evidence across all dimensions
+
+Be rigorous. Penalize candidates who list skills without evidence of using them."""
+
+
+@mcp.tool()
 async def get_department_requirements() -> str:
     """Return the 12 Global Engineering departments and their required skills.
 
