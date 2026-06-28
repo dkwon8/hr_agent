@@ -7,7 +7,6 @@ const NAV_ITEMS = [
   { href: "/", label: "Pipeline Summary", icon: "📊" },
   { href: "/candidates", label: "Candidate Scorecards", icon: "👤" },
   { href: "/rejected", label: "Rejected Candidates", icon: "❌" },
-  { href: "/analytics", label: "Department Analytics", icon: "📈" },
   { href: "/compare", label: "Compare Candidates", icon: "⚖️" },
   { href: "/traces", label: "Trace & History", icon: "🔍" },
 ];

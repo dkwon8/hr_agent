@@ -22,7 +22,7 @@ export default function PipelineSummary() {
   const rejected = (reportData.rejected_candidates as unknown[]) || [];
 
   if (!summary) {
-    return <p className="text-gray-400">No summary data available for this run.</p>;
+    return <p className="text-sm text-gray-400">No summary data available for this run.</p>;
   }
 
   const totalProcessed = summary.total_selected + summary.total_rejected;
@@ -93,13 +93,18 @@ export default function PipelineSummary() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
         <h3 className="text-sm font-medium text-gray-500 mb-3">Pipeline Steps</h3>
-        <div className="flex items-center gap-2 text-sm">
-          {["Parse Resumes", "Filter Candidates", "GitHub Validation", "Score Candidates", "Sort & Report"].map(
-            (step, i) => (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {[
+            { step: "Parse Resumes", detail: `${totalProcessed} resumes` },
+            { step: "Filter", detail: `${summary.total_selected} passed` },
+            { step: "GitHub", detail: "cross-validation" },
+            { step: "Score", detail: `top: ${summary.top_score ?? "N/A"}` },
+            { step: "Sort & Report", detail: "complete" },
+          ].map(({ step, detail }, i) => (
               <div key={step} className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg border border-green-200">
-                  <span>✅</span>
-                  <span>{step}</span>
+                <div className="px-3 py-2 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                  <p className="font-medium text-xs">{step}</p>
+                  <p className="text-[10px] text-green-600">{detail}</p>
                 </div>
                 {i < 4 && <span className="text-gray-300">→</span>}
               </div>

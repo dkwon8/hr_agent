@@ -11,6 +11,7 @@ interface TraceListItem {
   execution_time_ms: number;
   request_preview: string;
   response_preview: string;
+  mlflow_url?: string;
 }
 
 interface Span {
@@ -36,6 +37,7 @@ interface TraceDetail {
   response_preview: string;
   spans: Span[];
   assessments: Assessment[];
+  mlflow_url?: string;
 }
 
 const SPAN_TYPE_COLORS: Record<string, string> = {
@@ -82,7 +84,10 @@ export default function TracesPage() {
     return (
       <div>
         <h2 className="text-2xl font-semibold mb-6">Trace & History</h2>
-        <p className="text-gray-400">Loading traces...</p>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Loading traces...</p>
+        </div>
       </div>
     );
   }
@@ -115,27 +120,41 @@ export default function TracesPage() {
                 <p className="p-4 text-sm text-gray-400">No traces found.</p>
               ) : (
                 traces.map((t) => (
-                  <button
+                  <div
                     key={t.trace_id}
-                    onClick={() => loadTrace(t.trace_id)}
-                    className={`w-full text-left p-4 hover:bg-gray-50 transition-colors ${
+                    className={`p-4 hover:bg-gray-50 transition-colors ${
                       selectedTrace?.trace_id === t.trace_id ? "bg-blue-50" : ""
                     }`}
                   >
-                    <p className="text-sm font-medium truncate">
-                      {t.request_preview || "Agent run"}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">
-                        {formatDuration(t.execution_time_ms)}
-                      </span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        t.status === "OK" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
-                      }`}>
-                        {t.status}
-                      </span>
-                    </div>
-                  </button>
+                    <button
+                      onClick={() => loadTrace(t.trace_id)}
+                      className="w-full text-left"
+                    >
+                      <p className="text-sm font-medium truncate">
+                        {t.request_preview || "Agent run"}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-400">
+                          {formatDuration(t.execution_time_ms)}
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          t.status === "OK" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+                        }`}>
+                          {t.status}
+                        </span>
+                      </div>
+                    </button>
+                    {t.mlflow_url && (
+                      <a
+                        href={t.mlflow_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        Open in MLflow &#x2197;
+                      </a>
+                    )}
+                  </div>
                 ))
               )}
             </div>
@@ -145,16 +164,31 @@ export default function TracesPage() {
         <div className="lg:col-span-2">
           {loadingDetail ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-              <p className="text-gray-400">Loading trace details...</p>
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <p className="text-sm text-gray-500">Loading trace...</p>
+              </div>
             </div>
           ) : !selectedTrace ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-              <p className="text-gray-400">Select a trace to view details</p>
+              <p className="text-sm text-gray-400">Select a trace from the list to inspect it.</p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                <h3 className="text-sm font-medium text-gray-500 mb-3">Prompt</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-gray-500">Prompt</h3>
+                  {selectedTrace.mlflow_url && (
+                    <a
+                      href={selectedTrace.mlflow_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Open in MLflow &#x2197;
+                    </a>
+                  )}
+                </div>
                 <p className="text-sm bg-blue-50 rounded-lg p-3 border border-blue-100">
                   {selectedTrace.request_preview || "N/A"}
                 </p>

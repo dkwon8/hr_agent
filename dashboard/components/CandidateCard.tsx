@@ -40,7 +40,7 @@ interface Candidate {
   experience_summary?: string;
 }
 
-export default function CandidateCard({ candidate }: { candidate: Candidate }) {
+export default function CandidateCard({ candidate, rank }: { candidate: Candidate; rank?: number }) {
   const [expanded, setExpanded] = useState(false);
 
   const c = candidate;
@@ -49,13 +49,22 @@ export default function CandidateCard({ candidate }: { candidate: Candidate }) {
   const top3 = c.top_3_departments || [];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-colors ${
+      rank === 1 ? "border-green-300 ring-1 ring-green-100" : "border-gray-200"
+    }`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-5 text-left hover:bg-gray-50 transition-colors"
+        className="w-full p-5 text-left hover:bg-gray-50 transition-colors cursor-pointer"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
+            {rank && (
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                rank <= 3 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
+              }`}>
+                {rank}
+              </span>
+            )}
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
               style={{ backgroundColor: "#3b5998" }}>
               {c.name?.split(" ").map(n => n[0]).join("") || "?"}
@@ -70,7 +79,11 @@ export default function CandidateCard({ candidate }: { candidate: Candidate }) {
 
           <div className="flex items-center gap-6">
             <div className="text-right">
-              <p className="text-2xl font-bold" style={{ color: "#1a1a2e" }}>
+              <p className="text-2xl font-bold" style={{
+                color: (c.quality_score ?? 0) >= 70 ? "var(--accent-green)"
+                  : (c.quality_score ?? 0) >= 45 ? "var(--accent-amber)"
+                  : "var(--redhat-red)",
+              }}>
                 {c.quality_score ?? "—"}<span className="text-sm text-gray-400">/100</span>
               </p>
               {confidence && (
@@ -115,7 +128,7 @@ export default function CandidateCard({ candidate }: { candidate: Candidate }) {
                 {top3.map((dept, i) => (
                   <div key={dept.department} className={`p-3 rounded-lg border ${i === 0 ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium text-sm">{i === 0 ? "🏆 " : ""}{dept.department}</p>
+                      <p className="font-medium text-sm">{dept.department}</p>
                       <p className="font-bold text-sm">{dept.score}/100</p>
                     </div>
                     {dept.experience !== undefined && (

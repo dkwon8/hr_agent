@@ -50,12 +50,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <RunSelector onRunChange={handleRunChange} selectedRun={selectedRun} />
         <main className="flex-1 p-6 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <p className="text-gray-400">Loading pipeline data...</p>
+            <div className="flex items-center justify-center h-64 gap-3">
+              <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+              <p className="text-sm text-gray-500">Loading...</p>
             </div>
           ) : !reportData && !skipRunRequired ? (
             <div className="flex items-center justify-center h-64">
-              <p className="text-gray-400">Select a pipeline run to view results</p>
+              <p className="text-sm text-gray-400">Select a pipeline run above to view results.</p>
             </div>
           ) : (
             children

@@ -14,7 +14,7 @@ export default function CandidatesPage() {
     return (
       <div>
         <h2 className="text-2xl font-semibold mb-6">Candidate Scorecards</h2>
-        <p className="text-gray-400">No accepted candidates in this pipeline run.</p>
+        <p className="text-sm text-gray-400">All candidates were filtered out in this run. Check the Rejected tab for details.</p>
       </div>
     );
   }
@@ -27,11 +27,11 @@ export default function CandidatesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-semibold">Candidate Scorecards</h2>
-        <p className="text-sm text-gray-400">{sorted.length} accepted candidates</p>
+        <p className="text-sm text-gray-400">{sorted.length} accepted candidates, ranked by score</p>
       </div>
       <div className="space-y-3">
         {sorted.map((c, i) => (
-          <CandidateCard key={i} candidate={c as never} />
+          <CandidateCard key={i} candidate={c as never} rank={i + 1} />
         ))}
       </div>
     </div>

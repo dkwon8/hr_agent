@@ -2,10 +2,6 @@
 
 import { useState } from "react";
 import { useRun } from "@/components/DashboardShell";
-import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  ResponsiveContainer, Legend, Tooltip,
-} from "recharts";
 
 interface Candidate {
   name: string;
@@ -55,21 +51,6 @@ export default function ComparePage() {
   };
 
   const selectedCandidates = candidates.filter((c) => selected.includes(c.name));
-
-  const radarData = [
-    { dimension: "Experience", max: 40 },
-    { dimension: "Projects", max: 35 },
-    { dimension: "Learning Potential", max: 25 },
-  ].map((dim) => {
-    const entry: Record<string, string | number> = { dimension: dim.dimension };
-    selectedCandidates.forEach((c) => {
-      const key = dim.dimension === "Experience" ? "experience"
-        : dim.dimension === "Projects" ? "projects" : "learning_potential";
-      const raw = c.fit_breakdown?.[key as keyof typeof c.fit_breakdown] || 0;
-      entry[c.name] = Math.round((raw / dim.max) * 100);
-    });
-    return entry;
-  });
 
   const allSkills = new Set<string>();
   selectedCandidates.forEach((c) => c.skills?.forEach((s) => allSkills.add(s)));
@@ -164,31 +145,6 @@ export default function ComparePage() {
               </div>
             ))}
           </div>
-
-          {radarData.length > 0 && selectedCandidates.some((c) => c.fit_breakdown) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="text-sm font-medium text-gray-500 mb-4">Fit Breakdown Comparison (% of max)</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <RadarChart data={radarData}>
-                  <PolarGrid stroke="#e5e7eb" />
-                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 12 }} />
-                  <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  {selectedCandidates.map((c, i) => (
-                    <Radar
-                      key={c.name}
-                      name={c.name}
-                      dataKey={c.name}
-                      stroke={COLORS[i]}
-                      fill={COLORS[i]}
-                      fillOpacity={0.15}
-                    />
-                  ))}
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
 
           {sharedSkills.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">

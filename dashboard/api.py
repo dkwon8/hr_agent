@@ -100,32 +100,41 @@ def list_traces():
             return {"traces": [], "status": "no_experiment"}
 
         traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=20)
+        experiment_id = exp.experiment_id
+
+        traces = mlflow.search_traces(experiment_ids=[experiment_id], max_results=20)
         trace_list = []
         for _, row in traces.iterrows():
             trace_id = row.get("trace_id", "")
-            request_preview = row.get("request_preview", "")
 
-            if not request_preview and trace_id:
-                try:
-                    trace = mlflow.get_trace(trace_id)
-                    if trace and trace.data.spans:
-                        root = trace.data.spans[0]
-                        if root.inputs and isinstance(root.inputs, list):
-                            for msg in reversed(root.inputs):
-                                if isinstance(msg, dict) and msg.get("role") == "user":
-                                    content = msg.get("content", "")
-                                    request_preview = content[-1] if isinstance(content, list) else content
-                                    break
-                except Exception:
-                    pass
+            request_preview = ""
+            request_data = row.get("request")
+            if isinstance(request_data, list):
+                for msg in reversed(request_data):
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        content = msg.get("content", "")
+                        request_preview = content[-1] if isinstance(content, list) else content
+                        break
+
+            response_data = row.get("response", "")
+            response_preview = str(response_data)[:200] if response_data else ""
+
+            state = row.get("state", "")
+            status = state.value if hasattr(state, "value") else str(state)
+
+            execution_ms = int(row.get("execution_duration", 0) or 0)
+            request_time = int(row.get("request_time", 0) or 0)
+
+            mlflow_url = f"{tracking_uri}/#/experiments/{experiment_id}/traces/{trace_id}"
 
             trace_list.append({
                 "trace_id": trace_id,
-                "timestamp": str(row.get("timestamp_ms", "")),
-                "status": row.get("status", ""),
-                "execution_time_ms": row.get("execution_time_ms", 0),
+                "timestamp": str(request_time),
+                "status": status,
+                "execution_time_ms": execution_ms,
                 "request_preview": request_preview or "Agent run",
-                "response_preview": row.get("response_preview", ""),
+                "response_preview": response_preview,
+                "mlflow_url": mlflow_url,
             })
         return {"traces": trace_list, "status": "ok"}
     except Exception as e:
@@ -187,6 +196,11 @@ def get_trace(trace_id: str):
             elif root.outputs and isinstance(root.outputs, str):
                 response_text = root.outputs
 
+        exp_name = os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+        exp = mlflow.get_experiment_by_name(exp_name)
+        experiment_id = exp.experiment_id if exp else "0"
+        mlflow_url = f"{tracking_uri}/#/experiments/{experiment_id}/traces/{trace_id}"
+
         return {
             "trace_id": trace_id,
             "status": "ok",
@@ -194,6 +208,7 @@ def get_trace(trace_id: str):
             "response_preview": response_text,
             "spans": spans,
             "assessments": assessments,
+            "mlflow_url": mlflow_url,
         }
     except HTTPException:
         raise
