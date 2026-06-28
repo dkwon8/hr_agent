@@ -29,6 +29,40 @@ from agents import Runner
 from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
 
 
+def _run_builtin_evaluation(trace_df):
+    """Run MLflow built-in scorers against the latest trace.
+
+    Evaluates agent quality using LLM-as-judge scorers for tool call correctness,
+    tool call efficiency, completeness, and relevance. Results are logged as
+    assessments on the trace automatically.
+    """
+    try:
+        import mlflow.genai
+        from mlflow.genai.scorers import (
+            ToolCallCorrectness,
+            ToolCallEfficiency,
+            Completeness,
+            RelevanceToQuery,
+        )
+
+        os.environ.setdefault(
+            "MLFLOW_GENAI_JUDGE_DEFAULT_MODEL",
+            f"openai:/{os.getenv('OPENAI_MODEL_NAME', 'gpt-5.4-mini')}",
+        )
+
+        mlflow.genai.evaluate(
+            data=trace_df,
+            scorers=[
+                ToolCallCorrectness(),
+                ToolCallEfficiency(),
+                Completeness(),
+                RelevanceToQuery(),
+            ],
+        )
+    except Exception:
+        pass
+
+
 def _log_scoring_assessments(trace_id: str):
     """Log candidate scoring data as MLflow assessments from the most recent report."""
     import glob
@@ -215,6 +249,7 @@ async def on_message(message: cl.Message):
             if len(traces) > 0:
                 trace_id = traces.iloc[0]["trace_id"]
                 _log_scoring_assessments(trace_id)
+                _run_builtin_evaluation(traces.head(1))
     except Exception:
         pass
 

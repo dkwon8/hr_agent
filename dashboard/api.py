@@ -9,15 +9,24 @@ Run:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import glob
 import json
 import os
 import re
+import sys
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 import uvicorn
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI(title="HR Recruitment Dashboard API")
 
@@ -214,6 +223,113 @@ def get_trace(trace_id: str):
         raise
     except Exception as e:
         return {"trace_id": trace_id, "status": "unavailable", "error": str(e)}
+
+
+# ── Chat API ─────────────────────────────────────────────
+
+_CITE_PATTERN = re.compile(r"\s*(?:citeturn|turn)\d+\S*", re.IGNORECASE)
+
+TOOL_LABELS = {
+    "list_resumes": "Listing resumes from Google Drive",
+    "list_sorted_resumes": "Listing sorted resumes",
+    "read_resume": "Reading resume PDF",
+    "parse_resume": "Parsing resume with LLM",
+    "parse_all_resumes": "Parsing all resumes",
+    "search_candidates": "Searching candidates",
+    "check_candidate_location": "Checking candidate location",
+    "check_candidate_graduation": "Checking graduation date",
+    "filter_candidates": "Filtering candidates",
+    "lookup_profile": "Looking up GitHub profile",
+    "discover_profile": "Searching for GitHub profile",
+    "check_authenticity": "Checking GitHub authenticity",
+    "score_candidate": "Scoring candidate against departments",
+    "score_all_candidates": "Scoring all candidates",
+    "score_candidate_for_role": "Scoring candidate for custom role",
+    "score_all_for_role": "Scoring all candidates for custom role",
+    "get_department_requirements": "Loading department requirements",
+    "generate_report": "Generating pipeline report",
+    "sort_resumes": "Sorting resumes into folders",
+    "web_search": "Searching the web",
+    "fetch_job_posting": "Fetching job posting from Workday",
+}
+
+
+class _ChatState:
+    def __init__(self):
+        self.agent = None
+        self.mcp_servers = []
+        self.stack = None
+        self.messages: list[dict] = []
+        self.ready = False
+
+    async def ensure_ready(self):
+        if self.ready:
+            return
+        from agent import create_agent
+        self.agent, self.mcp_servers = create_agent()
+        self.stack = contextlib.AsyncExitStack()
+        for server in self.mcp_servers:
+            await self.stack.enter_async_context(server)
+        self.ready = True
+
+    async def shutdown(self):
+        if self.stack:
+            await self.stack.aclose()
+        self.ready = False
+
+
+_chat = _ChatState()
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest):
+    """Stream a chat response from the agent via SSE."""
+    from agents import Runner
+    from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
+    from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
+
+    await _chat.ensure_ready()
+    _chat.messages.append({"role": "user", "content": req.message})
+
+    async def event_stream():
+        result = Runner.run_streamed(_chat.agent, _chat.messages)
+
+        async for event in result.stream_events():
+            if isinstance(event, RawResponsesStreamEvent):
+                if isinstance(event.data, ResponseTextDeltaEvent):
+                    yield f"data: {json.dumps({'type': 'text', 'content': event.data.delta})}\n\n"
+
+            elif isinstance(event, RunItemStreamEvent):
+                if event.name == "tool_called":
+                    raw = event.item.raw_item
+                    tool_name = getattr(raw, "name", "") or ""
+                    label = TOOL_LABELS.get(tool_name, f"Running {tool_name}")
+                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': label})}\n\n"
+
+                elif event.name == "tool_output":
+                    yield f"data: {json.dumps({'type': 'tool_done'})}\n\n"
+
+        response = _CITE_PATTERN.sub("", result.final_output).rstrip()
+        _chat.messages.append({"role": "assistant", "content": response})
+        yield f"data: {json.dumps({'type': 'done', 'content': response})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/api/chat/reset")
+async def chat_reset():
+    """Reset the chat conversation history."""
+    _chat.messages.clear()
+    return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+async def shutdown_chat():
+    await _chat.shutdown()
 
 
 if __name__ == "__main__":

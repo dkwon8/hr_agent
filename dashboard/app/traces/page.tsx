@@ -214,24 +214,61 @@ export default function TracesPage() {
                 </div>
               </div>
 
-              {selectedTrace.assessments.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                  <h3 className="text-sm font-medium text-gray-500 mb-3">Assessments</h3>
-                  <div className="space-y-2">
-                    {selectedTrace.assessments.map((a, i) => (
-                      <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{a.name}</span>
-                          <span className="text-sm font-bold">{String(a.value)}</span>
+              {(() => {
+                const BUILTIN_NAMES = ["ToolCallCorrectness", "ToolCallEfficiency", "Completeness", "RelevanceToQuery", "Safety", "Fluency"];
+                const builtIn = selectedTrace.assessments.filter((a) => BUILTIN_NAMES.includes(a.name));
+                const custom = selectedTrace.assessments.filter((a) => !BUILTIN_NAMES.includes(a.name));
+
+                return (
+                  <>
+                    {builtIn.length > 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 className="text-sm font-medium text-gray-500 mb-3">Agent Quality Scores</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {builtIn.map((a, i) => {
+                            const val = String(a.value);
+                            const passed = val === "yes" || val === "true" || val === "True";
+                            const failed = val === "no" || val === "false" || val === "False";
+                            return (
+                              <div key={i} className={`rounded-lg p-3 border ${
+                                passed ? "bg-green-50 border-green-200" : failed ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-100"
+                              }`}>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium">{a.name}</span>
+                                  <span className={`text-sm font-bold ${
+                                    passed ? "text-green-700" : failed ? "text-red-700" : ""
+                                  }`}>{val}</span>
+                                </div>
+                                {a.rationale && (
+                                  <p className="text-xs text-gray-500 mt-1">{a.rationale}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        {a.rationale && (
-                          <p className="text-xs text-gray-500 mt-1">{a.rationale}</p>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                    {custom.length > 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 className="text-sm font-medium text-gray-500 mb-3">Candidate Assessments</h3>
+                        <div className="space-y-2">
+                          {custom.map((a, i) => (
+                            <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">{a.name}</span>
+                                <span className="text-sm font-bold">{String(a.value)}</span>
+                              </div>
+                              {a.rationale && (
+                                <p className="text-xs text-gray-500 mt-1">{a.rationale}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
