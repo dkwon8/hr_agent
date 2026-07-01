@@ -1,15 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f9fa;
-  --foreground: #1a1a1a;
-  --redhat-red: #ee0000;
-  --redhat-dark: #a30000;
-  --sidebar-bg: #1a1a2e;
-  --sidebar-text: #e0e0e0;
+  /* Red Hat brand palette */
+  --background: #f2f2f2;         /* gray-10 */
+  --foreground: #151515;         /* gray-95 (ux black) */
+  --redhat-red: #ee0000;         /* red-50 — brand only, never for errors */
+  --redhat-dark: #a60000;        /* red-60 */
+  --sidebar-bg: #151515;         /* gray-95 */
+  --sidebar-text: #a3a3a3;       /* gray-40 */
   --card-bg: #ffffff;
-  --accent-green: #22c55e;
-  --accent-amber: #f59e0b;
+  --accent-green: #3d7317;       /* success-green-60 */
+  --accent-amber: #f5921b;       /* orange-40 */
+  --accent-danger: #f0561d;      /* danger-orange-50 — for rejections/errors */
+  --accent-blue: #0066cc;        /* interaction-blue-50 — for links */
+  --border: #e0e0e0;             /* gray-20 */
+  --text-secondary: #707070;     /* gray-50 */
+  --text-tertiary: #a3a3a3;      /* gray-40 */
 }
 
 @theme inline {
@@ -23,4 +29,15 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
 }

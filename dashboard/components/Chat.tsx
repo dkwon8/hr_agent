@@ -23,11 +23,18 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [streamedText, setStreamedText] = useState("");
+  const [showHint, setShowHint] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamedText, tools]);
+
+  useEffect(() => {
+    const showTimer = setTimeout(() => setShowHint(true), 2000);
+    const hideTimer = setTimeout(() => setShowHint(false), 8000);
+    return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
+  }, []);
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -101,42 +108,54 @@ export default function Chat() {
     setTools([]);
   };
 
+  const mdClasses = "max-w-[85%] px-3.5 py-2.5 rounded-lg text-[13px] bg-gray-50 text-gray-700 border border-gray-200/80 prose prose-sm prose-gray leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-0.5 [&_strong]:text-gray-800";
+
   return (
     <>
-      {/* Toggle button */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="fixed bottom-5 right-5 z-50 w-12 h-12 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-lg hover:bg-gray-800 transition-colors cursor-pointer"
-        title="Chat with agent"
-      >
-        {open ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <div className="fixed bottom-5 right-5 z-50 flex items-end gap-2">
+        {/* Hint bubble */}
+        {showHint && !open && (
+          <div className="mb-1 animate-fade-in">
+            <div className="bg-gray-900 text-white text-[12px] px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap">
+              Ask the recruitment agent
+            </div>
+          </div>
         )}
-      </button>
 
-      {/* Chat panel */}
+        <button
+          onClick={() => { setOpen(!open); setShowHint(false); }}
+          className="relative w-14 h-14 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-lg hover:bg-gray-800 transition-all cursor-pointer hover:scale-105"
+          title="Chat with agent"
+        >
+          {open ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          )}
+          {!open && showHint && (
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[var(--redhat-red)] rounded-full animate-pulse" />
+          )}
+        </button>
+      </div>
+
       {open && (
-        <div className="fixed bottom-20 right-5 z-50 w-[440px] h-[600px] bg-white rounded-xl border border-gray-200 shadow-xl flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="fixed bottom-20 right-5 z-50 w-[460px] h-[620px] bg-white rounded-lg border border-gray-200/80 shadow-2xl flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Recruitment Agent</p>
-              <p className="text-xs text-gray-400">Ask questions or run the pipeline</p>
+              <p className="text-[13px] font-medium tracking-tight">Recruitment Agent</p>
+              <p className="text-[11px] text-gray-400">Ask questions or run the pipeline</p>
             </div>
             <button
               onClick={resetChat}
-              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors cursor-pointer"
+              className="text-[11px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
             >
               Clear
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-auto p-4 space-y-4">
+          <div className="flex-1 overflow-auto px-4 py-4 space-y-4">
             {messages.length === 0 && !sending && (
-              <p className="text-sm text-gray-400 text-center mt-8">
+              <p className="text-[13px] text-gray-400 text-center mt-12">
                 Send a message to start.
               </p>
             )}
@@ -144,49 +163,51 @@ export default function Chat() {
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "user" ? (
-                  <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap bg-gray-900 text-white">
+                  <div className="max-w-[85%] px-3.5 py-2 rounded-lg text-[13px] whitespace-pre-wrap bg-gray-900 text-white">
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-800 border border-gray-200 prose prose-sm prose-gray leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:mb-0.5">
+                  <div className={mdClasses}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                   </div>
                 )}
               </div>
             ))}
 
-            {/* Tool progress */}
             {tools.length > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-1 pl-1">
                 {tools.map((t, i) => (
-                  <p key={i} className="text-xs text-gray-500">
-                    {t.done ? "✓" : "•"} {t.label}
-                  </p>
+                  <div key={i} className="flex items-center gap-2 text-[11px] text-gray-400">
+                    {t.done ? (
+                      <svg className="w-3 h-3 text-green-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                    ) : (
+                      <div className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                    )}
+                    <span>{t.label}</span>
+                  </div>
                 ))}
               </div>
             )}
 
-            {/* Streaming text */}
             {streamedText && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-800 border border-gray-200 prose prose-sm prose-gray leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:mb-2 [&_ul]:mb-2 [&_li]:mb-0.5">
+                <div className={mdClasses}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamedText}</ReactMarkdown>
                 </div>
               </div>
             )}
 
             {sending && !streamedText && tools.length === 0 && (
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                <span className="text-xs text-gray-400">Thinking...</span>
+              <div className="flex items-center gap-2 pl-1">
+                <div className="w-3 h-3 border border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                <span className="text-[11px] text-gray-400">Thinking...</span>
               </div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="p-3 border-t border-gray-200">
+          <div className="px-3 py-3 border-t border-gray-100">
             <form
               onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
               className="flex gap-2"
@@ -197,12 +218,12 @@ export default function Chat() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask the agent..."
                 disabled={sending}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:opacity-50"
+                className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-md bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-gray-300 disabled:opacity-50 transition-colors"
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                className="px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-40 transition-colors cursor-pointer"
+                className="px-3.5 py-2 text-[13px] font-medium text-white bg-gray-900 rounded-md hover:bg-gray-800 disabled:opacity-30 transition-colors cursor-pointer"
               >
                 Send
               </button>

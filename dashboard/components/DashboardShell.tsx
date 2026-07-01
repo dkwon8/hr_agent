@@ -29,7 +29,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [reportData, setReportData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const skipRunRequired = pathname === "/traces";
+  const skipRunRequired = pathname === "/traces" || pathname === "/compare";
 
   const handleRunChange = (runId: string) => {
     setSelectedRun(runId);
@@ -46,17 +46,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   return (
     <RunContext.Provider value={{ selectedRun, reportData, loading }}>
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <RunSelector onRunChange={handleRunChange} selectedRun={selectedRun} />
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 px-8 py-6 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center h-64 gap-3">
-              <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-              <p className="text-sm text-gray-500">Loading...</p>
+            <div className="flex items-center justify-center h-64 gap-2">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+              <p className="text-[13px] text-gray-400">Loading...</p>
             </div>
           ) : !reportData && !skipRunRequired ? (
             <div className="flex items-center justify-center h-64">
-              <p className="text-sm text-gray-400">Select a pipeline run above to view results.</p>
+              <p className="text-[13px] text-gray-400">Select a pipeline run above to view results.</p>
             </div>
           ) : (
             children

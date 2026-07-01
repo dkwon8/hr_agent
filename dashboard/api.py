@@ -42,24 +42,91 @@ JOB_REQ_DIR = os.path.join(DATA_DIR, "job_requirements")
 
 
 def _get_report_files() -> list[dict]:
-    """List all report files with metadata."""
+    """List all report files with metadata, stats, and first-prompt labels."""
     pattern = os.path.join(DATA_DIR, "report_*.json")
     files = sorted(glob.glob(pattern), reverse=True)
     runs = []
+
+    trace_prompts = _get_trace_first_prompts()
+
     for f in files:
         basename = os.path.basename(f)
         match = re.search(r"report_(\d{8}_\d{6})\.json", basename)
         if match:
             ts = match.group(1)
             dt = datetime.strptime(ts, "%Y%m%d_%H%M%S")
+            run_time_ms = int(dt.timestamp() * 1000)
+
+            stats = ""
+            try:
+                with open(f) as rf:
+                    report = json.load(rf)
+                summary = report.get("summary", {})
+                total = summary.get("total_selected", 0) + summary.get("total_rejected", 0)
+                accepted = summary.get("total_selected", 0)
+                stats = f"{total} resumes · {accepted} accepted"
+            except Exception:
+                pass
+
+            title = _find_matching_prompt(trace_prompts, run_time_ms)
+
             runs.append({
                 "id": ts,
                 "filename": basename,
                 "path": f,
                 "timestamp": dt.isoformat(),
-                "label": dt.strftime("%b %d, %Y at %I:%M %p"),
+                "label": dt.strftime("%b %d at %I:%M %p"),
+                "title": title,
+                "description": stats,
             })
     return runs
+
+
+def _get_trace_first_prompts() -> list[tuple[int, str]]:
+    """Get the first user prompt and timestamp from recent MLflow traces."""
+    try:
+        import mlflow
+        import urllib.request
+
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+        urllib.request.urlopen(tracking_uri, timeout=2)
+        mlflow.set_tracking_uri(tracking_uri)
+
+        exp = mlflow.get_experiment_by_name("recruitment-filtration-agent")
+        if not exp:
+            return []
+
+        traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=50)
+        prompts = []
+        for _, row in traces.iterrows():
+            request_time = int(row.get("request_time", 0) or 0)
+            request_data = row.get("request")
+            prompt = ""
+            if isinstance(request_data, list):
+                for msg in request_data:
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        content = msg.get("content", "")
+                        prompt = content[-1] if isinstance(content, list) else content
+                        break
+            if request_time and prompt:
+                prompts.append((request_time, prompt))
+        return prompts
+    except Exception:
+        return []
+
+
+def _find_matching_prompt(prompts: list[tuple[int, str]], run_time_ms: int) -> str:
+    """Find the first user prompt closest to a run's timestamp."""
+    best = ""
+    best_diff = float("inf")
+    for trace_time, prompt in prompts:
+        diff = abs(trace_time - run_time_ms)
+        if diff < best_diff and diff < 10 * 60 * 1000:
+            best_diff = diff
+            best = prompt
+    if len(best) > 60:
+        best = best[:57] + "..."
+    return best
 
 
 def _load_report(run_id: str) -> dict:
@@ -75,7 +142,7 @@ def _load_report(run_id: str) -> dict:
 def list_runs():
     """List all pipeline runs."""
     runs = _get_report_files()
-    return {"runs": [{"id": r["id"], "label": r["label"], "timestamp": r["timestamp"]} for r in runs]}
+    return {"runs": [{"id": r["id"], "label": r["label"], "timestamp": r["timestamp"], "title": r.get("title", ""), "description": r.get("description", "")} for r in runs]}
 
 
 @app.get("/api/runs/{run_id}")
@@ -225,6 +292,55 @@ def get_trace(trace_id: str):
         return {"trace_id": trace_id, "status": "unavailable", "error": str(e)}
 
 
+# ── Post-message evaluation ──────────────────────────────
+
+def _run_post_message_evaluation():
+    """Run MLflow built-in agent evaluation scorers after a chat message."""
+    try:
+        import mlflow
+        import mlflow.genai
+        import urllib.request
+        from mlflow.genai.scorers import (
+            ToolCallCorrectness,
+            ToolCallEfficiency,
+            Completeness,
+            RelevanceToQuery,
+        )
+
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+        urllib.request.urlopen(tracking_uri, timeout=2)
+        mlflow.set_tracking_uri(tracking_uri)
+
+        mlflow.flush_trace_async_logging()
+
+        exp = mlflow.get_experiment_by_name(
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+        )
+        if not exp:
+            return
+
+        traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=1)
+        if len(traces) == 0:
+            return
+
+        os.environ.setdefault(
+            "MLFLOW_GENAI_JUDGE_DEFAULT_MODEL",
+            f"openai:/{os.getenv('OPENAI_MODEL_NAME', 'gpt-5.4-mini')}",
+        )
+
+        mlflow.genai.evaluate(
+            data=traces.head(1),
+            scorers=[
+                ToolCallCorrectness(),
+                ToolCallEfficiency(),
+                Completeness(),
+                RelevanceToQuery(),
+            ],
+        )
+    except Exception:
+        pass
+
+
 # ── Chat API ─────────────────────────────────────────────
 
 _CITE_PATTERN = re.compile(r"\s*(?:citeturn|turn)\d+\S*", re.IGNORECASE)
@@ -316,6 +432,8 @@ async def chat(req: ChatRequest):
         response = _CITE_PATTERN.sub("", result.final_output).rstrip()
         _chat.messages.append({"role": "assistant", "content": response})
         yield f"data: {json.dumps({'type': 'done', 'content': response})}\n\n"
+
+        _run_post_message_evaluation()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

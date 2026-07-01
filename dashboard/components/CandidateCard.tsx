@@ -40,62 +40,59 @@ interface Candidate {
   experience_summary?: string;
 }
 
+function scoreColor(score: number): string {
+  if (score >= 70) return "var(--accent-green)";
+  if (score >= 45) return "var(--accent-amber)";
+  return "var(--accent-danger)";
+}
+
 export default function CandidateCard({ candidate, rank }: { candidate: Candidate; rank?: number }) {
   const [expanded, setExpanded] = useState(false);
 
   const c = candidate;
   const confidence = c.score_confidence;
-  const breakdown = c.fit_breakdown;
   const top3 = c.top_3_departments || [];
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-colors ${
-      rank === 1 ? "border-green-300 ring-1 ring-green-100" : "border-gray-200"
+    <div className={`bg-white rounded-lg border overflow-hidden transition-colors ${
+      rank === 1 ? "border-green-200" : "border-gray-200/80"
     }`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-5 text-left hover:bg-gray-50 transition-colors cursor-pointer"
+        className="w-full px-5 py-4 text-left hover:bg-gray-50/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {rank && (
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+              <span className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-semibold shrink-0 ${
                 rank <= 3 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
               }`}>
                 {rank}
               </span>
             )}
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-              style={{ backgroundColor: "#3b5998" }}>
-              {c.name?.split(" ").map(n => n[0]).join("") || "?"}
-            </div>
             <div>
-              <h3 className="font-semibold text-lg">{c.name}</h3>
-              <p className="text-sm text-gray-500">
+              <h3 className="font-medium text-[15px] tracking-tight">{c.name}</h3>
+              <p className="text-xs text-gray-400">
                 {c.university}{c.major ? ` · ${c.major}` : ""}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5">
             <div className="text-right">
-              <p className="text-2xl font-bold" style={{
-                color: (c.quality_score ?? 0) >= 70 ? "var(--accent-green)"
-                  : (c.quality_score ?? 0) >= 45 ? "var(--accent-amber)"
-                  : "var(--redhat-red)",
-              }}>
-                {c.quality_score ?? "—"}<span className="text-sm text-gray-400">/100</span>
+              <p className="text-lg font-semibold tabular-nums" style={{ color: scoreColor(c.quality_score ?? 0) }}>
+                {c.quality_score ?? "—"}<span className="text-xs text-gray-400 font-normal">/100</span>
               </p>
               {confidence && (
-                <p className="text-xs text-gray-400">
-                  Confidence: {confidence.min}–{confidence.max}
-                </p>
+                <p className="text-[10px] text-gray-400">{confidence.min}–{confidence.max} range</p>
               )}
             </div>
-            <div className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-2.5 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-600">
               {c.best_fit_department || "Unscored"}
-            </div>
-            <span className="text-gray-400 text-lg">{expanded ? "▲" : "▼"}</span>
+            </span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+            </svg>
           </div>
         </div>
       </button>
@@ -103,43 +100,33 @@ export default function CandidateCard({ candidate, rank }: { candidate: Candidat
       {expanded && (
         <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <div>
-              <p className="text-gray-400 text-xs">Location</p>
-              <p className="font-medium">{c.location || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-gray-400 text-xs">Graduation</p>
-              <p className="font-medium">{c.graduation_date || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-gray-400 text-xs">Degree</p>
-              <p className="font-medium capitalize">{c.degree_level || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-gray-400 text-xs">Scoring Passes</p>
-              <p className="font-medium">{confidence?.passes || "N/A"}</p>
-            </div>
+            <Detail label="Location" value={c.location} />
+            <Detail label="Graduation" value={c.graduation_date} />
+            <Detail label="Degree" value={c.degree_level} capitalize />
+            <Detail label="Passes" value={confidence?.passes?.toString()} />
           </div>
 
           {top3.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">Top Department Fits</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <SectionLabel>Top Department Fits</SectionLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {top3.map((dept, i) => (
-                  <div key={dept.department} className={`p-3 rounded-lg border ${i === 0 ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
+                  <div key={dept.department} className={`p-3 rounded-md border ${
+                    i === 0 ? "border-gray-300 bg-gray-50" : "border-gray-200/80 bg-gray-50/50"
+                  }`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium text-sm">{dept.department}</p>
-                      <p className="font-bold text-sm">{dept.score}/100</p>
+                      <p className="font-medium text-xs text-gray-700">{dept.department}</p>
+                      <p className="font-semibold text-xs tabular-nums">{dept.score}</p>
                     </div>
                     {dept.experience !== undefined && (
                       <div className="space-y-1">
-                        <ScoreBar label="Experience" value={dept.experience} max={40} />
-                        <ScoreBar label="Projects" value={dept.projects || 0} max={35} />
-                        <ScoreBar label="Learning" value={dept.learning_potential || 0} max={25} />
+                        <ScoreBar label="Exp" value={dept.experience} max={40} />
+                        <ScoreBar label="Proj" value={dept.projects || 0} max={35} />
+                        <ScoreBar label="Learn" value={dept.learning_potential || 0} max={25} />
                       </div>
                     )}
                     {dept.reasoning && (
-                      <p className="text-xs text-gray-500 mt-2 line-clamp-3">{dept.reasoning}</p>
+                      <p className="text-[11px] text-gray-400 mt-2 line-clamp-2">{dept.reasoning}</p>
                     )}
                   </div>
                 ))}
@@ -149,20 +136,19 @@ export default function CandidateCard({ candidate, rank }: { candidate: Candidat
 
           {(c.github_url || (c.cross_validation_notes && c.cross_validation_notes.length > 0)) && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">GitHub Validation</h4>
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
+              <SectionLabel>GitHub</SectionLabel>
+              <div className="bg-gray-50 rounded-md p-3 text-sm border border-gray-200/80">
                 {c.github_url && (
                   <p className="mb-1">
-                    <span className="text-gray-400">Profile: </span>
                     <a href={c.github_url.startsWith("http") ? c.github_url : `https://${c.github_url}`}
                       target="_blank" rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline">
+                      className="text-blue-600 hover:underline text-xs">
                       {c.github_url}
                     </a>
                   </p>
                 )}
                 {c.cross_validation_notes?.map((note, i) => (
-                  <p key={i} className="text-gray-600">• {note}</p>
+                  <p key={i} className="text-xs text-gray-500">· {note}</p>
                 ))}
               </div>
             </div>
@@ -170,10 +156,10 @@ export default function CandidateCard({ candidate, rank }: { candidate: Candidat
 
           {c.skills && c.skills.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">Skills</h4>
-              <div className="flex flex-wrap gap-1.5">
+              <SectionLabel>Skills</SectionLabel>
+              <div className="flex flex-wrap gap-1">
                 {c.skills.map((skill) => (
-                  <span key={skill} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs border border-gray-200">
+                  <span key={skill} className="px-2 py-0.5 bg-gray-50 text-gray-600 rounded text-[11px] border border-gray-200/80">
                     {skill}
                   </span>
                 ))}
@@ -183,15 +169,15 @@ export default function CandidateCard({ candidate, rank }: { candidate: Candidat
 
           {c.quality_reasoning && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">Overall Assessment</h4>
-              <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{c.quality_reasoning}</p>
+              <SectionLabel>Assessment</SectionLabel>
+              <p className="text-xs text-gray-500 leading-relaxed">{c.quality_reasoning}</p>
             </div>
           )}
 
           {c.experience_summary && (
             <div>
-              <h4 className="text-sm font-medium text-gray-500 mb-2">Experience Summary</h4>
-              <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{c.experience_summary}</p>
+              <SectionLabel>Experience</SectionLabel>
+              <p className="text-xs text-gray-500 leading-relaxed">{c.experience_summary}</p>
             </div>
           )}
         </div>
@@ -200,18 +186,31 @@ export default function CandidateCard({ candidate, rank }: { candidate: Candidat
   );
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">{children}</p>;
+}
+
+function Detail({ label, value, capitalize }: { label: string; value?: string; capitalize?: boolean }) {
+  return (
+    <div>
+      <p className="text-[11px] text-gray-400">{label}</p>
+      <p className={`text-sm font-medium ${capitalize ? "capitalize" : ""}`}>{value || "—"}</p>
+    </div>
+  );
+}
+
 function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = Math.round((value / max) * 100);
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="text-gray-400 w-16">{label}</span>
-      <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+    <div className="flex items-center gap-1.5 text-[11px]">
+      <span className="text-gray-400 w-10">{label}</span>
+      <div className="flex-1 bg-gray-200 rounded-full h-1 overflow-hidden">
         <div className="h-full rounded-full" style={{
           width: `${pct}%`,
-          backgroundColor: pct >= 70 ? "var(--accent-green)" : pct >= 40 ? "var(--accent-amber)" : "var(--redhat-red)",
+          backgroundColor: pct >= 70 ? "var(--accent-green)" : pct >= 40 ? "var(--accent-amber)" : "var(--accent-danger)",
         }} />
       </div>
-      <span className="text-gray-500 w-8 text-right">{value}/{max}</span>
+      <span className="text-gray-400 w-7 text-right tabular-nums">{value}/{max}</span>
     </div>
   );
 }

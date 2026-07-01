@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRun } from "@/components/DashboardShell";
 
 const API_BASE = "http://localhost:8001";
 
@@ -54,7 +55,8 @@ function formatDuration(ms: number): string {
 }
 
 export default function TracesPage() {
-  const [traces, setTraces] = useState<TraceListItem[]>([]);
+  const { reportData } = useRun();
+  const [allTraces, setAllTraces] = useState<TraceListItem[]>([]);
   const [tracesStatus, setTracesStatus] = useState<string>("loading");
   const [selectedTrace, setSelectedTrace] = useState<TraceDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -63,11 +65,46 @@ export default function TracesPage() {
     fetch(`${API_BASE}/api/traces`)
       .then((res) => res.json())
       .then((data) => {
-        setTraces(data.traces || []);
+        setAllTraces(data.traces || []);
         setTracesStatus(data.status || "ok");
       })
       .catch(() => setTracesStatus("error"));
   }, []);
+
+  const [runs, setRuns] = useState<{ id: string; timestamp: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/runs`)
+      .then((res) => res.json())
+      .then((data) => setRuns(data.runs || []))
+      .catch(() => {});
+  }, []);
+
+  const traces = (() => {
+    if (!reportData) return allTraces;
+    const summary = reportData.summary as { pipeline_run?: string } | undefined;
+    if (!summary?.pipeline_run) return allTraces;
+
+    const runTime = new Date(summary.pipeline_run).getTime();
+
+    const runTimestamps = runs
+      .map((r) => new Date(r.timestamp).getTime())
+      .filter((t) => !isNaN(t))
+      .sort((a, b) => a - b);
+
+    const currentIdx = runTimestamps.findIndex((t) => Math.abs(t - runTime) < 60000);
+    const nextRunTime = currentIdx >= 0 && currentIdx < runTimestamps.length - 1
+      ? runTimestamps[currentIdx + 1]
+      : Infinity;
+
+    const filtered = allTraces.filter((t) => {
+      const traceTime = parseInt(t.timestamp);
+      if (!traceTime) return false;
+      return traceTime >= runTime - 60000 && traceTime < nextRunTime;
+    });
+
+    return filtered.length > 0 ? filtered : allTraces;
+  })();
 
   const loadTrace = (traceId: string) => {
     setLoadingDetail(true);
@@ -138,7 +175,7 @@ export default function TracesPage() {
                           {formatDuration(t.execution_time_ms)}
                         </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${
-                          t.status === "OK" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+                          t.status === "OK" ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"
                         }`}>
                           {t.status}
                         </span>

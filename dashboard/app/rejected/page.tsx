@@ -51,7 +51,7 @@ export default function RejectedPage() {
                 <td className="px-5 py-4 text-sm text-gray-600">{c.location || "N/A"}</td>
                 <td className="px-5 py-4 text-sm text-gray-600">{c.graduation_date || "N/A"}</td>
                 <td className="px-5 py-4 text-sm">
-                  <span className="px-2 py-1 bg-red-50 text-red-700 rounded text-xs border border-red-200">
+                  <span className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-xs border border-orange-200">
                     {c.rejection_reason || "No reason provided"}
                   </span>
                 </td>

@@ -9,13 +9,13 @@ interface MetricCardProps {
 
 export default function MetricCard({ title, value, subtitle, color }: MetricCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-      <p className="text-sm font-medium text-gray-500">{title}</p>
-      <p className="text-3xl font-bold mt-1" style={{ color: color || "var(--foreground)" }}>
+    <div className="bg-white rounded-lg border border-gray-200/80 px-5 py-4">
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
+      <p className="text-2xl font-semibold mt-1 tracking-tight" style={{ color: color || "var(--foreground)" }}>
         {value}
       </p>
       {subtitle && (
-        <p className="text-sm text-gray-400 mt-1">{subtitle}</p>
+        <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
       )}
     </div>
   );
