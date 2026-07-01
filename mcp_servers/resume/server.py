@@ -195,6 +195,56 @@ async def list_resumes(
 
 
 @mcp.tool()
+async def list_run_folders() -> str:
+    """List all pipeline run folders from Google Drive.
+
+    Each run creates a timestamped folder (e.g., Run_2026-06-28_17-52) containing
+    Accepted/ and Rejected/ subfolders with sorted resumes. Use this to find
+    resumes after they've been moved from the main folder.
+
+    Returns folder IDs that can be passed to list_resumes or list_sorted_resumes.
+    """
+    drive = _get_drive_service()
+    runs_parent = os.getenv("GDRIVE_RUNS_PARENT_FOLDER_ID", "")
+
+    if not drive or not runs_parent:
+        return json.dumps({"error": "Google Drive runs folder not configured"})
+
+    try:
+        results = drive.files().list(
+            q=f"'{runs_parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="files(id, name, createdTime)",
+            orderBy="createdTime desc",
+        ).execute()
+
+        run_folders = []
+        for folder in results.get("files", []):
+            subfolder_results = drive.files().list(
+                q=f"'{folder['id']}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                fields="files(id, name)",
+            ).execute()
+
+            subfolders = {}
+            for sf in subfolder_results.get("files", []):
+                name_lower = sf["name"].lower()
+                if "accepted" in name_lower:
+                    subfolders["accepted_folder_id"] = sf["id"]
+                elif "rejected" in name_lower:
+                    subfolders["rejected_folder_id"] = sf["id"]
+
+            run_folders.append({
+                "name": folder["name"],
+                "folder_id": folder["id"],
+                "created": folder.get("createdTime", ""),
+                **subfolders,
+            })
+
+        return json.dumps({"count": len(run_folders), "run_folders": run_folders})
+    except Exception as e:
+        return json.dumps({"error": f"Failed to list run folders: {e}"})
+
+
+@mcp.tool()
 async def list_sorted_resumes(
     folder: str,
     folder_id: Optional[str] = None,

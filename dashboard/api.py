@@ -294,6 +294,61 @@ def get_trace(trace_id: str):
 
 # ── Post-message evaluation ──────────────────────────────
 
+def _tag_trace_metadata(
+    model: str,
+    tool_calls: list[str],
+    tool_errors: int,
+    execution_time_ms: int,
+    message_count: int,
+):
+    """Tag the latest MLflow trace with agent metadata for the improve system.
+
+    These tags are what the improve/self-healing system reads to detect
+    patterns like context bloat, tool redundancy, and performance degradation.
+    """
+    try:
+        import mlflow
+        import urllib.request
+
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
+        urllib.request.urlopen(tracking_uri, timeout=2)
+        mlflow.set_tracking_uri(tracking_uri)
+
+        mlflow.flush_trace_async_logging()
+
+        exp = mlflow.get_experiment_by_name(
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent")
+        )
+        if not exp:
+            return
+
+        traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=1)
+        if len(traces) == 0:
+            return
+
+        trace_id = traces.iloc[0]["trace_id"]
+        trace = mlflow.get_trace(trace_id)
+
+        trace_size = 0
+        trace_meta = traces.iloc[0].get("trace_metadata", {})
+        if isinstance(trace_meta, dict):
+            trace_size = int(trace_meta.get("mlflow.trace.sizeBytes", 0))
+
+        unique_tools = sorted(set(tool_calls))
+        duplicate_tools = [t for t in unique_tools if tool_calls.count(t) > 1]
+
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.model", model)
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tool_call_count", str(len(tool_calls)))
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tool_errors", str(tool_errors))
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tools_used", ", ".join(unique_tools) if unique_tools else "none")
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.duplicate_tools", ", ".join(duplicate_tools) if duplicate_tools else "none")
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.execution_time_ms", str(execution_time_ms))
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.trace_size_bytes", str(trace_size))
+        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.message_count", str(message_count))
+    except Exception:
+        pass
+
+
 def _run_post_message_evaluation():
     """Run MLflow built-in agent evaluation scorers after a chat message."""
     try:
@@ -348,6 +403,7 @@ _CITE_PATTERN = re.compile(r"\s*(?:citeturn|turn)\d+\S*", re.IGNORECASE)
 TOOL_LABELS = {
     "list_resumes": "Listing resumes from Google Drive",
     "list_sorted_resumes": "Listing sorted resumes",
+    "list_run_folders": "Browsing pipeline run folders",
     "read_resume": "Reading resume PDF",
     "parse_resume": "Parsing resume with LLM",
     "parse_all_resumes": "Parsing all resumes",
@@ -413,6 +469,9 @@ async def chat(req: ChatRequest):
 
     async def event_stream():
         result = Runner.run_streamed(_chat.agent, _chat.messages)
+        tool_calls = []
+        tool_errors = 0
+        start_time = __import__("time").time()
 
         async for event in result.stream_events():
             if isinstance(event, RawResponsesStreamEvent):
@@ -423,16 +482,26 @@ async def chat(req: ChatRequest):
                 if event.name == "tool_called":
                     raw = event.item.raw_item
                     tool_name = getattr(raw, "name", "") or ""
+                    tool_calls.append(tool_name)
                     label = TOOL_LABELS.get(tool_name, f"Running {tool_name}")
                     yield f"data: {json.dumps({'type': 'tool_start', 'tool': label})}\n\n"
 
                 elif event.name == "tool_output":
                     yield f"data: {json.dumps({'type': 'tool_done'})}\n\n"
 
+        elapsed_ms = int((__import__("time").time() - start_time) * 1000)
+
         response = _CITE_PATTERN.sub("", result.final_output).rstrip()
         _chat.messages.append({"role": "assistant", "content": response})
         yield f"data: {json.dumps({'type': 'done', 'content': response})}\n\n"
 
+        _tag_trace_metadata(
+            model=_chat.agent.model,
+            tool_calls=tool_calls,
+            tool_errors=tool_errors,
+            execution_time_ms=elapsed_ms,
+            message_count=len(_chat.messages),
+        )
         _run_post_message_evaluation()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
