@@ -309,7 +309,7 @@ def create_agent() -> tuple[Agent, list[MCPServerStdio]]:
         name="HR Recruitment Agent",
         instructions=AGENT_INSTRUCTIONS,
         mcp_servers=mcp_servers,
-        model="gpt-5.4",
+        model="gpt-5.4-mni",
         tools=[WebSearchTool(), fetch_job_posting],
     )
 
