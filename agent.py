@@ -168,6 +168,8 @@ When asked to evaluate or run the pipeline:
 
 ## Tool Efficiency Rules — Avoid Unnecessary Calls
 
+Do not call MCP Tool Discovery more than once per pipeline run unless processing different candidates.
+
 Always prefer batch tools over calling individual tools in a loop:
 - Use **parse_all_resumes** instead of calling parse_resume on each resume individually.
 - Use **filter_candidates** instead of calling check_candidate_location or check_candidate_graduation on each candidate individually. filter_candidates applies both checks in a single call.
