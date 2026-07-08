@@ -163,12 +163,12 @@ When asked to evaluate or run the pipeline:
 3. **Filter candidates** — Call filter_candidates once with all parsed candidates. Pass custom criteria as needed based on the role.
 4. **GitHub validation** — Only for technical roles where code contributions matter. Use lookup_profile for candidates with a GitHub URL, or discover_profile to find one. Skip for non-technical roles.
 5. **Score candidates** — Call score_all_for_role once (for custom roles) or score_all_candidates once (for default GE departments). Do not use both.
-6. **Generate report** — Call generate_report once with all candidates.
-7. **Sort resumes** — Call sort_resumes once to sort into accepted/rejected folders.
+6. **Generate report** — Call generate_report once with all candidates (selected + rejected). This step is mandatory — do not skip it or substitute your own summary.
+7. **Sort resumes** — Call sort_resumes once to sort into accepted/rejected folders. This step is mandatory — always sort resumes even if results were already presented.
+
+**Important:** The pipeline is not complete until ALL steps above have been executed. Never stop after scoring — always continue through generate_report and sort_resumes.
 
 ## Tool Efficiency Rules — Avoid Unnecessary Calls
-
-Do not call MCP Tool Discovery more than once per pipeline run unless processing different candidates.
 
 Always prefer batch tools over calling individual tools in a loop:
 - Use **parse_all_resumes** instead of calling parse_resume on each resume individually.
