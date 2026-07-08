@@ -7,7 +7,6 @@ const NAV_ITEMS = [
   { href: "/", label: "Overview" },
   { href: "/compare", label: "Compare" },
   { href: "/traces", label: "Traces" },
-  { href: "/improve", label: "Improve" },
 ];
 
 export default function Sidebar() {
