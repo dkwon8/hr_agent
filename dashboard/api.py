@@ -413,6 +413,7 @@ TOOL_LABELS = {
     "filter_candidates": "Filtering candidates",
     "lookup_profile": "Looking up GitHub profile",
     "discover_profile": "Searching for GitHub profile",
+    
     "check_authenticity": "Checking GitHub authenticity",
     "score_candidate": "Scoring candidate against departments",
     "score_all_candidates": "Scoring all candidates",
