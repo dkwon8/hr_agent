@@ -23,7 +23,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 import chainlit as cl
 from openai.types.responses.response_text_delta_event import ResponseTextDeltaEvent
 
-from agent import create_agent
+from agent import create_agent, trim_conversation_history
 
 from agents import Runner
 from agents.stream_events import RawResponsesStreamEvent, RunItemStreamEvent
@@ -194,7 +194,7 @@ async def on_message(message: cl.Message):
     msg = cl.Message(content="")
     await msg.send()
 
-    result = Runner.run_streamed(agent, messages)
+    result = Runner.run_streamed(agent, trim_conversation_history(messages))
     streaming_started = False
     tool_status_lines = []
 

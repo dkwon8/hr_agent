@@ -36,6 +36,47 @@ def _clean_citations(text: str) -> str:
     """Strip web search citation markers from agent output."""
     return _CITE_PATTERN.sub("", text).rstrip()
 
+
+# -- Conversation history management ------------------------------------------
+# Large pipeline responses (candidate reports, scoring results) can reach
+# tens of KB each.  Without trimming, the full history is re-sent every turn,
+# causing trace sizes to grow past 2 MB and pressuring the context window.
+
+MAX_HISTORY_MESSAGES = 20       # keep at most 20 messages (10 user/assistant turns)
+RECENT_MESSAGES_VERBATIM = 6    # most-recent 3 turns are kept verbatim
+TRUNCATE_THRESHOLD = 500        # older assistant messages are truncated beyond this length
+
+
+def trim_conversation_history(messages: list[dict]) -> list[dict]:
+    """Return a trimmed copy of *messages* to bound context-window size.
+
+    - Drops the oldest messages beyond MAX_HISTORY_MESSAGES.
+    - Keeps the most recent RECENT_MESSAGES_VERBATIM messages verbatim.
+    - Truncates older assistant messages to TRUNCATE_THRESHOLD chars.
+    """
+    if len(messages) <= RECENT_MESSAGES_VERBATIM:
+        return list(messages)
+
+    recent = messages[-RECENT_MESSAGES_VERBATIM:]
+    older = messages[:-RECENT_MESSAGES_VERBATIM]
+
+    budget = MAX_HISTORY_MESSAGES - RECENT_MESSAGES_VERBATIM
+    if len(older) > budget:
+        older = older[-budget:]
+
+    trimmed: list[dict] = []
+    for msg in older:
+        content = msg.get("content", "")
+        if msg["role"] == "assistant" and len(content) > TRUNCATE_THRESHOLD:
+            trimmed.append({
+                "role": "assistant",
+                "content": content[:TRUNCATE_THRESHOLD] + "\n\n[Earlier response truncated for brevity]",
+            })
+        else:
+            trimmed.append(msg)
+
+    return trimmed + recent
+
 import httpx
 from dotenv import load_dotenv
 
@@ -368,8 +409,7 @@ async def run_interactive():
             # Add user message to history
             messages.append({"role": "user", "content": user_input})
 
-            # Run agent with full conversation history
-            result = await Runner.run(agent, messages)
+            result = await Runner.run(agent, trim_conversation_history(messages))
             try:
                 mlflow.flush_trace_async_logging()
             except Exception:
