@@ -50,3 +50,5 @@ logs/
 # Cursor
 .cursor/
 credentials/
+docs/
+logs/

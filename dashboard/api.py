@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 import uvicorn
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "hr_agent"))
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -175,9 +177,7 @@ def list_traces():
         if not exp:
             return {"traces": [], "status": "no_experiment"}
 
-        traces = mlflow.search_traces(experiment_ids=[exp.experiment_id], max_results=20)
         experiment_id = exp.experiment_id
-
         traces = mlflow.search_traces(experiment_ids=[experiment_id], max_results=20)
         trace_list = []
         for _, row in traces.iterrows():
@@ -337,14 +337,19 @@ def _tag_trace_metadata(
         unique_tools = sorted(set(tool_calls))
         duplicate_tools = [t for t in unique_tools if tool_calls.count(t) > 1]
 
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.model", model)
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tool_call_count", str(len(tool_calls)))
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tool_errors", str(tool_errors))
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.tools_used", ", ".join(unique_tools) if unique_tools else "none")
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.duplicate_tools", ", ".join(duplicate_tools) if duplicate_tools else "none")
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.execution_time_ms", str(execution_time_ms))
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.trace_size_bytes", str(trace_size))
-        mlflow.MlflowClient().set_trace_tag(trace_id, "agent.message_count", str(message_count))
+        client = mlflow.MlflowClient()
+        tags = {
+            "agent.model": model,
+            "agent.tool_call_count": str(len(tool_calls)),
+            "agent.tool_errors": str(tool_errors),
+            "agent.tools_used": ", ".join(unique_tools) if unique_tools else "none",
+            "agent.duplicate_tools": ", ".join(duplicate_tools) if duplicate_tools else "none",
+            "agent.execution_time_ms": str(execution_time_ms),
+            "agent.trace_size_bytes": str(trace_size),
+            "agent.message_count": str(message_count),
+        }
+        for key, value in tags.items():
+            client.set_trace_tag(trace_id, key, value)
     except Exception:
         pass
 
@@ -472,7 +477,7 @@ async def chat(req: ChatRequest):
         result = Runner.run_streamed(_chat.agent, _chat.messages)
         tool_calls = []
         tool_errors = 0
-        start_time = __import__("time").time()
+        start_time = time.time()
 
         async for event in result.stream_events():
             if isinstance(event, RawResponsesStreamEvent):
@@ -490,7 +495,7 @@ async def chat(req: ChatRequest):
                 elif event.name == "tool_output":
                     yield f"data: {json.dumps({'type': 'tool_done'})}\n\n"
 
-        elapsed_ms = int((__import__("time").time() - start_time) * 1000)
+        elapsed_ms = int((time.time() - start_time) * 1000)
 
         response = _CITE_PATTERN.sub("", result.final_output).rstrip()
         _chat.messages.append({"role": "assistant", "content": response})

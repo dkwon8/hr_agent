@@ -44,10 +44,11 @@ wait_for_port() {
     return 0
 }
 
-# 1. MLflow — must be ready before other services
+# 1. MLflow — must be ready before other services (uses fork at ~/mlflow)
 echo ""
 echo "Starting MLflow..."
-mlflow server --port 5001 >> logs/mlflow.log 2>&1 &
+OPENAI_API_KEY=$(grep "^OPENAI_API_KEY" .env | cut -d= -f2-) \
+  bash -c 'cd ~/mlflow && uv run mlflow server --port 5001 --backend-store-uri "sqlite:///'$(pwd)'/mlflow.db"' >> logs/mlflow.log 2>&1 &
 MLFLOW_PID=$!
 wait_for_port 5001 "MLflow" 15
 

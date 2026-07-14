@@ -1,13 +1,16 @@
 """
-Suggestion engine for the MLflow improve system.
+Suggestion engine (fallback only).
 
-Takes findings from the analyzer and generates actionable improvement
-suggestions. Each suggestion includes what to change, why, and a
-confidence level.
+Converts Finding objects from the local analyzer into actionable
+Suggestion objects. Each finding pattern has a dedicated handler.
+
+Only runs when the MLflow fork server is unreachable — the primary
+path gets suggestions from the fork's endpoint.
 """
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from .analyzer import Finding
 
@@ -26,13 +29,9 @@ class Suggestion:
     evidence: dict = field(default_factory=dict)
 
 
-_SUGGESTION_COUNTER = 0
-
-
-def _next_id() -> str:
-    global _SUGGESTION_COUNTER
-    _SUGGESTION_COUNTER += 1
-    return f"s-{_SUGGESTION_COUNTER:04d}"
+def _make_id(pattern: str, description: str) -> str:
+    digest = hashlib.sha256(f"{pattern}:{description}".encode()).hexdigest()[:8]
+    return f"s-{digest}"
 
 
 def generate_suggestions(findings: list[Finding]) -> list[Suggestion]:
@@ -62,7 +61,7 @@ def _handle_context_bloat(finding: Finding) -> Suggestion:
     avg_size = finding.evidence.get("avg_size_bytes", 0)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="model_upgrade",
         severity=finding.severity,
         title="Context window pressure detected",
@@ -83,7 +82,7 @@ def _handle_context_growth(finding: Finding) -> Suggestion:
     ratio = finding.evidence.get("growth_ratio", 1)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
         title="Trace sizes growing over time",
@@ -105,7 +104,7 @@ def _handle_tool_redundancy(finding: Finding) -> Suggestion:
     rate = finding.evidence.get("rate", 0)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="prompt_fix",
         severity=finding.severity,
         title=f"Redundant tool calls: {worst}",
@@ -132,7 +131,7 @@ def _handle_score_degradation(finding: Finding) -> Suggestion:
     }
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="prompt_fix" if scorer in action_map else "investigate",
         severity=finding.severity,
         title=f"{scorer} score is low ({pass_rate:.0%})",
@@ -153,7 +152,7 @@ def _handle_score_declining(finding: Finding) -> Suggestion:
     older = finding.evidence.get("older_rate", 0)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
         title=f"{scorer} quality declining",
@@ -172,7 +171,7 @@ def _handle_slow_execution(finding: Finding) -> Suggestion:
     avg_ms = finding.evidence.get("avg_ms", 0)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="config_change",
         severity=finding.severity,
         title=f"Slow pipeline ({avg_ms / 1000:.0f}s average)",
@@ -192,7 +191,7 @@ def _handle_execution_slowdown(finding: Finding) -> Suggestion:
     ratio = finding.evidence.get("ratio", 1)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
         title=f"Execution time increasing ({ratio:.1f}x slower)",
@@ -213,7 +212,7 @@ def _handle_error_spike(finding: Finding) -> Suggestion:
     rate = finding.evidence.get("error_rate", 0)
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
         title=f"Tool errors increasing ({rate:.0%} of runs affected)",
@@ -233,7 +232,7 @@ def _handle_incomplete_pipeline(finding: Finding) -> Suggestion:
     missing = finding.evidence.get("missing_tools", {})
 
     return Suggestion(
-        id=_next_id(),
+        id=_make_id(finding.pattern, finding.description),
         type="prompt_fix",
         severity=finding.severity,
         title="Pipeline steps being skipped",

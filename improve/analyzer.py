@@ -1,11 +1,12 @@
 """
-Trace analyzer for the MLflow improve system.
+Local trace analyzer (fallback only).
 
-Reads traces, tags, and assessments from MLflow and detects patterns
-that indicate quality degradation, inefficiency, or scaling issues.
+This is the original tag-based analyzer with hardcoded thresholds.
+It only runs when the MLflow fork server is unreachable — the primary
+analysis path uses the fork's statistical baseline detectors via HTTP.
 
-Each detection function returns a list of findings that the suggestion
-engine uses to generate actionable fixes.
+Reads agent.* tags set by dashboard/api.py's _tag_trace_metadata().
+These tags are only written after chat messages, not terminal runs.
 """
 
 from __future__ import annotations
@@ -47,11 +48,7 @@ def analyze_traces(traces_data: list[dict]) -> list[Finding]:
 
 
 def _detect_context_bloat(traces: list[dict]) -> list[Finding]:
-    """Detect if trace sizes are growing, indicating context window pressure.
-
-    Maps to mentor's example: 'if it has 1000 resumes, context bloat happens,
-    switch from 250K model to 1M model.'
-    """
+    """Detect if trace sizes are growing, indicating context window pressure."""
     sizes = []
     for t in traces:
         size = int(t.get("tags", {}).get("agent.trace_size_bytes", 0))

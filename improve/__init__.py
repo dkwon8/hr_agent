@@ -1,31 +1,30 @@
 """
-MLflow Improve — Self-optimization and self-healing for MLflow-deployed agents.
+Improve module — analyzes MLflow traces to detect agent quality issues.
 
-Analyzes trace history and evaluation scores to detect quality degradation,
-inefficiency, and scaling issues. Generates actionable suggestions to
-improve agent performance.
+Proxies to the MLflow fork's improve endpoint (which uses statistical
+baselines and LLM code analysis). Falls back to a local tag-based
+analyzer if the MLflow fork server is unreachable.
 
 Usage:
-    import mlflow.genai.improve
+    from improve import analyze
 
-    # Analyze the last 20 traces for an experiment
-    result = mlflow.genai.improve.analyze(
-        experiment_name="recruitment-filtration-agent",
-        trace_count=20,
-    )
+    result = analyze(experiment_name="recruitment-filtration-agent")
 
-    # See what was found
-    for suggestion in result["suggestions"]:
-        print(f"[{suggestion.severity}] {suggestion.title}")
-        print(f"  Action: {suggestion.action}")
-
-Works with any agent deployed on MLflow — not specific to any one agent.
+    for s in result["suggestions"]:
+        print(f"[{s['severity']}] {s['title']}: {s['action']}")
 """
 
 from __future__ import annotations
 
-from .analyzer import analyze_traces, Finding
-from .suggestions import generate_suggestions, Suggestion
+import logging
+import os
+
+from .analyzer import analyze_traces, Finding  # noqa: F401 — used by _local_analyze
+from .suggestions import generate_suggestions, Suggestion  # noqa: F401 — used by _local_analyze
+
+_logger = logging.getLogger(__name__)
+
+_MLFLOW_SERVER = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5001")
 
 
 def analyze(
@@ -35,21 +34,51 @@ def analyze(
 ) -> dict:
     """Analyze recent traces and generate improvement suggestions.
 
-    Reads the last N traces from an MLflow experiment, runs detection
-    patterns (context bloat, tool redundancy, score degradation, etc.),
-    and returns actionable suggestions.
-
-    Args:
-        experiment_name: Name of the MLflow experiment to analyze.
-        trace_count: Number of recent traces to analyze (default 20).
-        tracking_uri: MLflow tracking server URI. Uses default if not set.
-
-    Returns:
-        Dict with keys:
-            - findings: list of detected issues
-            - suggestions: list of actionable fixes
-            - summary: overview stats
+    Delegates to the MLflow fork's improve endpoint (statistical baselines,
+    LLM code analysis). Falls back to the local tag-based analyzer if the
+    MLflow fork server is unreachable.
     """
+    server = tracking_uri or _MLFLOW_SERVER
+    try:
+        return _proxy_to_mlflow(server, experiment_name, trace_count)
+    except Exception as e:
+        _logger.warning("MLflow improve proxy failed (%s), falling back to local analyzer", e)
+        return _local_analyze(experiment_name, trace_count, tracking_uri)
+
+
+def _proxy_to_mlflow(server: str, experiment_name: str, trace_count: int) -> dict:
+    """Call the MLflow fork's improve endpoint over HTTP."""
+    import httpx
+    import mlflow
+
+    mlflow.set_tracking_uri(server)
+    exp = mlflow.get_experiment_by_name(experiment_name)
+    if not exp:
+        return {
+            "findings": [],
+            "suggestions": [],
+            "summary": {"status": "no_experiment", "experiment_name": experiment_name},
+        }
+
+    resp = httpx.post(
+        f"{server}/ajax-api/3.0/mlflow/improve/invoke",
+        json={
+            "experiment_id": exp.experiment_id,
+            "trace_count": trace_count,
+            "mode": "traces_only",
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _local_analyze(
+    experiment_name: str,
+    trace_count: int = 20,
+    tracking_uri: str | None = None,
+) -> dict:
+    """Fallback: local tag-based analyzer (Level 1 hardcoded thresholds)."""
     import mlflow
 
     if tracking_uri:
@@ -151,4 +180,4 @@ def analyze(
     }
 
 
-__all__ = ["analyze", "analyze_traces", "generate_suggestions", "Finding", "Suggestion"]
+__all__ = ["analyze"]
