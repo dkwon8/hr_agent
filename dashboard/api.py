@@ -39,7 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "hr_agent", "data")
 JOB_REQ_DIR = os.path.join(DATA_DIR, "job_requirements")
 
 
@@ -498,7 +498,7 @@ async def chat(req: ChatRequest):
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         response = _CITE_PATTERN.sub("", result.final_output).rstrip()
-        _chat.messages.append({"role": "assistant", "content": response})
+        _chat.messages = result.to_input_list()
         yield f"data: {json.dumps({'type': 'done', 'content': response})}\n\n"
 
         _tag_trace_metadata(

@@ -8,12 +8,12 @@ Run:
     python agent.py                              # interactive chat mode
     python agent.py "Process the resumes"        # single prompt mode
 
-How it works:
-    1. Spawns all 5 MCP servers as stdio subprocesses
-    2. User sends a prompt in natural language
-    3. GPT-5.4 decides which tools to call and in what order
-    4. Tools execute across MCP servers (resume, filter, github, scoring, output)
-    5. Agent responds with results and can handle follow-up questions
+How it works: 
+- Spawns all 5 MCP servers as stdio subprocesses
+- User sends a prompt in natural language
+- GPT-5.4 decides which tools to call and in what order
+- Tools execute across MCP servers (resume, filter, github, scoring, output)
+- Agent responds with results and can handle follow-up questions
 
 The agent maintains conversation state — after processing resumes,
 you can ask follow-up questions like "Why was William rejected?" or
@@ -39,7 +39,7 @@ def _clean_citations(text: str) -> str:
 import httpx
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # Suppress noisy debug logs from MCP servers and HTTP requests
 logging.getLogger("mcp").setLevel(logging.WARNING)
@@ -47,8 +47,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # MLflow tracing — only enable if the tracking server is reachable.
 # MLflow's OpenAI autolog doesn't map all OpenAI Agents SDK span types,
-# so "task", "turn", and "mcp_tools" spans show up as "Unknown". We patch
-# the span type map and name function to fix this.
 try:
     import urllib.request
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")

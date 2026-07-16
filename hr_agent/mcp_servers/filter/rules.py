@@ -14,8 +14,8 @@ def _normalize_location(location: str) -> str:
 
 
 LOCATION_ALIASES = {
-    "boston": {"boston", "boston ma", "boston massachusetts"},
-    "raleigh": {"raleigh", "raleigh nc", "raleigh north carolina", "durham", "rtp", "research triangle"},
+    "boston": {"boston", "boston ma", "boston massachusetts", "ma", "massachusetts", "cambridge", "somerville"},
+    "raleigh": {"raleigh", "raleigh nc", "raleigh north carolina", "durham", "rtp", "research triangle", "nc", "north carolina", "chapel hill", "cary"},
     "remote": {"remote", "remote us", "remote usa", "work from home", "anywhere"},
 }
 

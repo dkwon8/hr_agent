@@ -511,6 +511,7 @@ async def search_candidates(
             c.get("university", ""),
             c.get("major", ""),
             c.get("location", ""),
+            c.get("graduation_date", ""),
             " ".join(c.get("skills", [])),
             c.get("experience_summary", ""),
         ]).lower()
