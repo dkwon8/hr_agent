@@ -493,6 +493,14 @@ async def chat(req: ChatRequest):
                     yield f"data: {json.dumps({'type': 'tool_start', 'tool': label})}\n\n"
 
                 elif event.name == "tool_output":
+                    try:
+                        output_str = getattr(event.item, "output", "") or ""
+                        if output_str:
+                            output_data = json.loads(output_str)
+                            if isinstance(output_data, dict) and "error" in output_data:
+                                tool_errors += 1
+                    except Exception:
+                        pass
                     yield f"data: {json.dumps({'type': 'tool_done'})}\n\n"
 
         elapsed_ms = int((time.time() - start_time) * 1000)

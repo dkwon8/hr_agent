@@ -7,6 +7,7 @@ Works without a token (60 req/hr) or with a token (5000 req/hr).
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 import httpx
@@ -23,6 +24,20 @@ def _headers() -> dict:
     if GITHUB_TOKEN:
         h["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     return h
+
+
+async def _request_with_retry(
+    client: httpx.AsyncClient, url: str, max_retries: int = 2, **kwargs
+) -> httpx.Response:
+    """GET with retry on rate-limit (403/429) responses."""
+    for attempt in range(max_retries + 1):
+        resp = await client.get(url, headers=_headers(), **kwargs)
+        if resp.status_code in (403, 429) and attempt < max_retries:
+            retry_after = int(resp.headers.get("Retry-After", str(2 * (attempt + 1))))
+            await asyncio.sleep(min(retry_after, 10))
+            continue
+        return resp
+    return resp
 
 
 def _days_since(iso_date: str) -> int | None:
@@ -60,10 +75,10 @@ def _is_low_effort_message(msg: str) -> bool:
 async def _get_recent_events(client: httpx.AsyncClient, username: str) -> dict:
     """Use GitHub Events API to get actual recent activity (last 90 days)."""
     try:
-        resp = await client.get(
+        resp = await _request_with_retry(
+            client,
             f"{GITHUB_API}/users/{username}/events",
             params={"per_page": 100},
-            headers=_headers(),
         )
         if resp.status_code != 200:
             return {}
@@ -107,10 +122,10 @@ async def _get_recent_events(client: httpx.AsyncClient, username: str) -> dict:
 async def _get_repo_commit_stats(client: httpx.AsyncClient, username: str, repo_name: str) -> dict:
     """Get commit activity for a single repo to assess authenticity."""
     try:
-        commits_resp = await client.get(
+        commits_resp = await _request_with_retry(
+            client,
             f"{GITHUB_API}/repos/{username}/{repo_name}/commits",
             params={"per_page": 30},
-            headers=_headers(),
         )
         if commits_resp.status_code != 200:
             return {}
@@ -302,18 +317,20 @@ async def lookup_github_profile(github_url: str) -> dict | None:
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            user_resp = await client.get(
-                f"{GITHUB_API}/users/{username}", headers=_headers()
+            user_resp = await _request_with_retry(
+                client, f"{GITHUB_API}/users/{username}"
             )
-            user_resp.raise_for_status()
+            if user_resp.status_code != 200:
+                return None
             user_data = user_resp.json()
 
-            repos_resp = await client.get(
+            repos_resp = await _request_with_retry(
+                client,
                 f"{GITHUB_API}/users/{username}/repos",
                 params={"sort": "updated", "per_page": 10},
-                headers=_headers(),
             )
-            repos_resp.raise_for_status()
+            if repos_resp.status_code != 200:
+                return None
             repos_data = repos_resp.json()
 
             # Get recent activity from Events API (most reliable for "active" check)
