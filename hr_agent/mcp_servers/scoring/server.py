@@ -69,7 +69,7 @@ JOB_REQUIREMENTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data
 def _get_llm():
     from langchain_openai import ChatOpenAI
     return ChatOpenAI(
-        model=os.getenv("OPENAI_MODEL_NAME", "gpt-5.4"),
+        model=os.getenv("OPENAI_MODEL_NAME", "gpt-5.4-mini"),
         api_key=os.getenv("OPENAI_API_KEY", ""),
         temperature=0,
     )
@@ -104,7 +104,7 @@ async def score_candidate(
     llm = _get_llm()
     prompt = load_prompt()
 
-    result = await score_with_median(candidate, job_requirements, llm, prompt, passes=3)
+    result = await score_with_median(candidate, job_requirements, llm, prompt, passes=1)
 
     return json.dumps(result)
 
@@ -132,11 +132,10 @@ async def score_all_candidates(
     scored = []
     errors = []
 
-    # Process in batches of 10
-    batch_size = 10
+    batch_size = 5
     for i in range(0, len(candidates), batch_size):
         batch = candidates[i:i + batch_size]
-        tasks = [score_with_median(c, job_requirements, llm, prompt, passes=3) for c in batch]
+        tasks = [score_with_median(c, job_requirements, llm, prompt, passes=1) for c in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for c, result in zip(batch, results):
@@ -197,7 +196,7 @@ async def score_candidate_for_role(
     job_requirements = _build_dynamic_job_requirements(role_requirements)
     prompt = _build_dynamic_scoring_prompt(role_requirements)
 
-    result = await score_with_median(candidate, job_requirements, llm, prompt, passes=3)
+    result = await score_with_median(candidate, job_requirements, llm, prompt, passes=1)
 
     return json.dumps(result)
 
@@ -228,10 +227,10 @@ async def score_all_for_role(
     scored = []
     errors = []
 
-    batch_size = 10
+    batch_size = 5
     for i in range(0, len(candidates), batch_size):
         batch = candidates[i:i + batch_size]
-        tasks = [score_with_median(c, job_requirements, llm, prompt, passes=3) for c in batch]
+        tasks = [score_with_median(c, job_requirements, llm, prompt, passes=1) for c in batch]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for c, result in zip(batch, results):
