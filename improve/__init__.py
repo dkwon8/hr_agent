@@ -147,6 +147,7 @@ def _local_analyze(
             {
                 "pattern": f.pattern,
                 "severity": f.severity,
+                "category": f.category,
                 "description": f.description,
                 "evidence": f.evidence,
             }
@@ -157,6 +158,7 @@ def _local_analyze(
                 "id": s.id,
                 "type": s.type,
                 "severity": s.severity,
+                "category": s.category,
                 "title": s.title,
                 "description": s.description,
                 "action": s.action,
@@ -180,4 +182,69 @@ def _local_analyze(
     }
 
 
-__all__ = ["analyze"]
+def build_harness_prompt(
+    suggestions: list[dict],
+    traces_summary: dict,
+    repo_path: str,
+) -> str:
+    """Construct a prompt for the coding harness based on analysis results."""
+    heal_suggestions = [s for s in suggestions if s.get("category") == "heal"]
+    improve_suggestions = [s for s in suggestions if s.get("category") == "improve"]
+
+    lines = [
+        "You are analyzing and fixing an AI agent's codebase based on issues "
+        "detected from its execution traces. Make minimal, focused changes.",
+        "",
+        "## Trace Analysis Summary",
+        f"- Traces analyzed: {traces_summary.get('traces_analyzed', 'N/A')}",
+        f"- Current model: {traces_summary.get('current_model', 'unknown')}",
+        f"- Average tool calls per run: {traces_summary.get('avg_tool_calls', 'N/A')}",
+    ]
+    if traces_summary.get("high_severity"):
+        lines.append(f"- High severity issues: {traces_summary['high_severity']}")
+    if traces_summary.get("medium_severity"):
+        lines.append(f"- Medium severity issues: {traces_summary['medium_severity']}")
+    lines.append("")
+
+    idx = 1
+    if heal_suggestions:
+        lines.append("## Critical: Errors & Failures (fix these first)")
+        for s in heal_suggestions:
+            lines.append(f"### {idx}. [{s['severity'].upper()}] {s['title']}")
+            lines.append(f"**Type:** {s['type']}")
+            lines.append(f"**Description:** {s['description']}")
+            lines.append(f"**Recommended action:** {s['action']}")
+            if s.get("evidence"):
+                evidence_items = ", ".join(f"{k}={v}" for k, v in s["evidence"].items())
+                lines.append(f"**Evidence:** {evidence_items}")
+            lines.append("")
+            idx += 1
+
+    if improve_suggestions:
+        lines.append("## Optimization Opportunities")
+        for s in improve_suggestions:
+            lines.append(f"### {idx}. [{s['severity'].upper()}] {s['title']}")
+            lines.append(f"**Type:** {s['type']}")
+            lines.append(f"**Description:** {s['description']}")
+            lines.append(f"**Recommended action:** {s['action']}")
+            if s.get("evidence"):
+                evidence_items = ", ".join(f"{k}={v}" for k, v in s["evidence"].items())
+                lines.append(f"**Evidence:** {evidence_items}")
+            lines.append("")
+            idx += 1
+
+    lines.extend([
+        "## Instructions",
+        "- Fix errors and failures first, then apply optimizations.",
+        "- Make minimal, focused changes. Do not refactor unrelated code.",
+        "- Prefer changes to configuration, prompts, and system instructions over architectural changes.",
+        "- If a suggestion recommends a model change, update the relevant configuration or environment variable.",
+        "- If a suggestion recommends a prompt fix, edit the system prompt or instructions file.",
+        f"- The repository is at: {repo_path}",
+        "",
+    ])
+
+    return "\n".join(lines)
+
+
+__all__ = ["analyze", "build_harness_prompt"]

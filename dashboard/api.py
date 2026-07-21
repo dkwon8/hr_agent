@@ -520,22 +520,6 @@ async def chat_reset():
     return {"status": "ok"}
 
 
-@app.get("/api/improve")
-def get_improve():
-    """Analyze recent traces and return improvement suggestions."""
-    try:
-        from improve import analyze
-
-        result = analyze(
-            experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", "recruitment-filtration-agent"),
-            trace_count=20,
-            tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001"),
-        )
-        return result
-    except Exception as e:
-        return {"findings": [], "suggestions": [], "summary": {"status": "error", "error": str(e)}}
-
-
 @app.on_event("shutdown")
 async def shutdown_chat():
     await _chat.shutdown()

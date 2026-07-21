@@ -19,8 +19,22 @@ class Finding:
     """A detected issue from trace analysis."""
     pattern: str
     severity: str  # "low", "medium", "high"
+    category: str  # "heal" or "improve"
     description: str
     evidence: dict = field(default_factory=dict)
+
+
+_PATTERN_CATEGORY: dict[str, str] = {
+    "error_spike": "heal",
+    "context_bloat": "improve",
+    "context_growth": "improve",
+    "tool_redundancy": "improve",
+    "score_degradation": "improve",
+    "score_declining": "improve",
+    "slow_execution": "improve",
+    "execution_slowdown": "improve",
+    "incomplete_pipeline": "improve",
+}
 
 
 def analyze_traces(traces_data: list[dict]) -> list[Finding]:
@@ -68,6 +82,7 @@ def _detect_context_bloat(traces: list[dict]) -> list[Finding]:
         findings.append(Finding(
             pattern="context_bloat",
             severity="high" if max_size > 2_000_000 else "medium",
+            category=_PATTERN_CATEGORY["context_bloat"],
             description=f"Trace sizes averaging {avg_size / 1_000_000:.1f}MB, max {max_size / 1_000_000:.1f}MB. Large traces indicate heavy context window usage.",
             evidence={
                 "avg_size_bytes": int(avg_size),
@@ -84,6 +99,7 @@ def _detect_context_bloat(traces: list[dict]) -> list[Finding]:
             findings.append(Finding(
                 pattern="context_growth",
                 severity="medium",
+                category=_PATTERN_CATEGORY["context_growth"],
                 description=f"Trace sizes growing — recent average {recent_avg / 1_000_000:.1f}MB vs older {older_avg / 1_000_000:.1f}MB.",
                 evidence={
                     "recent_avg": int(recent_avg),
@@ -122,6 +138,7 @@ def _detect_tool_redundancy(traces: list[dict]) -> list[Finding]:
         findings.append(Finding(
             pattern="tool_redundancy",
             severity="medium" if dupe_rate > 0.5 else "low",
+            category=_PATTERN_CATEGORY["tool_redundancy"],
             description=f"Tool redundancy in {traces_with_duplicates}/{len(traces)} traces ({dupe_rate:.0%}). Most duplicated: {worst_tool}.",
             evidence={
                 "duplicate_counts": duplicate_counts,
@@ -168,6 +185,7 @@ def _detect_score_degradation(traces: list[dict]) -> list[Finding]:
             findings.append(Finding(
                 pattern="score_degradation",
                 severity="high" if pass_rate < 0.3 else "medium",
+                category=_PATTERN_CATEGORY["score_degradation"],
                 description=f"{name} passing only {pass_rate:.0%} of the time ({sum(scores)}/{len(scores)} traces).",
                 evidence={
                     "scorer": name,
@@ -183,6 +201,7 @@ def _detect_score_degradation(traces: list[dict]) -> list[Finding]:
                 findings.append(Finding(
                     pattern="score_declining",
                     severity="medium",
+                    category=_PATTERN_CATEGORY["score_declining"],
                     description=f"{name} declining — recent {recent_rate:.0%} vs older {older_rate:.0%}.",
                     evidence={
                         "scorer": name,
@@ -213,6 +232,7 @@ def _detect_slowdown(traces: list[dict]) -> list[Finding]:
         findings.append(Finding(
             pattern="slow_execution",
             severity="medium" if avg_time > 180_000 else "low",
+            category=_PATTERN_CATEGORY["slow_execution"],
             description=f"Average execution time is {avg_time / 1000:.0f}s. Pipeline runs over 2 minutes.",
             evidence={
                 "avg_ms": int(avg_time),
@@ -227,6 +247,7 @@ def _detect_slowdown(traces: list[dict]) -> list[Finding]:
             findings.append(Finding(
                 pattern="execution_slowdown",
                 severity="medium",
+                category=_PATTERN_CATEGORY["execution_slowdown"],
                 description=f"Execution slowing — recent {recent_avg / 1000:.0f}s vs older {older_avg / 1000:.0f}s.",
                 evidence={
                     "recent_avg_ms": int(recent_avg),
@@ -261,6 +282,7 @@ def _detect_error_spike(traces: list[dict]) -> list[Finding]:
         findings.append(Finding(
             pattern="error_spike",
             severity="high" if error_rate > 0.5 else "medium",
+            category=_PATTERN_CATEGORY["error_spike"],
             description=f"Tool errors in {traces_with_errors}/{len(error_counts)} traces ({error_rate:.0%}). Total errors: {total_errors}.",
             evidence={
                 "traces_with_errors": traces_with_errors,
@@ -273,47 +295,59 @@ def _detect_error_spike(traces: list[dict]) -> list[Finding]:
 
 
 def _detect_incomplete_pipeline(traces: list[dict]) -> list[Finding]:
-    """Detect if the agent is skipping pipeline steps.
+    """Detect if the agent is skipping steps compared to its own full pipeline.
 
-    A full pipeline should use: parse_all_resumes, filter_candidates,
-    score_all_candidates (or score_all_for_role), generate_report, sort_resumes.
+    Builds a reference tool set from the union of all traces, then flags
+    traces that use significantly fewer tools than the full set.
     """
-    expected_core = {"parse_all_resumes", "filter_candidates", "generate_report", "sort_resumes"}
-    expected_scoring = {"score_all_candidates", "score_all_for_role"}
-
-    incomplete_count = 0
-    missing_tools: dict[str, int] = {}
-
+    tool_sets: list[set[str]] = []
     for t in traces:
         tools_used = t.get("tags", {}).get("agent.tools_used", "")
         if not tools_used or tools_used == "none":
             continue
+        used_set = {tool.strip() for tool in tools_used.split(",") if tool.strip()}
+        if len(used_set) >= 2:
+            tool_sets.append(used_set)
 
-        used_set = {tool.strip() for tool in tools_used.split(",")}
-
-        # Only check traces that look like pipeline runs (have parse)
-        if "parse_all_resumes" not in used_set:
-            continue
-
-        missing_core = expected_core - used_set
-        has_scoring = bool(used_set & expected_scoring)
-
-        if missing_core or not has_scoring:
-            incomplete_count += 1
-            for tool in missing_core:
-                missing_tools[tool] = missing_tools.get(tool, 0) + 1
-            if not has_scoring:
-                missing_tools["scoring"] = missing_tools.get("scoring", 0) + 1
-
-    if incomplete_count == 0:
+    if len(tool_sets) < 3:
         return []
+
+    full_pipeline: set[str] = set()
+    for ts in tool_sets:
+        full_pipeline.update(ts)
+
+    if len(full_pipeline) < 3:
+        return []
+
+    threshold = 0.6
+    incomplete_count = 0
+    missing_tools: dict[str, int] = {}
+    for ts in tool_sets:
+        coverage = len(ts) / len(full_pipeline)
+        if coverage < threshold:
+            incomplete_count += 1
+            for tool in full_pipeline - ts:
+                missing_tools[tool] = missing_tools.get(tool, 0) + 1
+
+    incomplete_rate = incomplete_count / len(tool_sets)
+    if incomplete_count < 2 or incomplete_rate < 0.2:
+        return []
+
+    top_missing = dict(sorted(missing_tools.items(), key=lambda x: -x[1])[:5])
 
     return [Finding(
         pattern="incomplete_pipeline",
         severity="medium",
-        description=f"Pipeline incomplete in {incomplete_count} traces. Missing steps: {', '.join(missing_tools.keys())}.",
+        category=_PATTERN_CATEGORY["incomplete_pipeline"],
+        description=(
+            f"Pipeline incomplete in {incomplete_count}/{len(tool_sets)} traces "
+            f"({incomplete_rate:.0%}). Most skipped steps: {', '.join(top_missing.keys())}."
+        ),
         evidence={
             "incomplete_count": incomplete_count,
-            "missing_tools": missing_tools,
+            "total_pipeline_traces": len(tool_sets),
+            "incomplete_rate": round(incomplete_rate, 2),
+            "missing_tools": top_missing,
+            "full_pipeline_size": len(full_pipeline),
         },
     )]

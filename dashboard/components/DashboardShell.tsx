@@ -29,7 +29,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [reportData, setReportData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const skipRunRequired = pathname === "/traces" || pathname === "/compare" || pathname === "/improve";
+  const skipRunRequired = pathname === "/traces" || pathname === "/compare";
 
   const handleRunChange = (runId: string) => {
     setSelectedRun(runId);

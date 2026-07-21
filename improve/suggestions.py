@@ -21,6 +21,7 @@ class Suggestion:
     id: str
     type: str  # "model_upgrade", "prompt_fix", "config_change", "investigate"
     severity: str  # "low", "medium", "high"
+    category: str  # "heal" or "improve"
     title: str
     description: str
     action: str
@@ -64,11 +65,12 @@ def _handle_context_bloat(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="model_upgrade",
         severity=finding.severity,
+        category=finding.category,
         title="Context window pressure detected",
         description=(
             f"Traces are averaging {avg_size / 1_000_000:.1f}MB "
             f"(max {max_size / 1_000_000:.1f}MB). "
-            f"As resume count grows, the context window will fill up "
+            f"As input size grows, the context window will fill up "
             f"and the agent will start dropping information or failing."
         ),
         action="Switch to a model with a larger context window (e.g., gpt-5.4-max with 1M tokens).",
@@ -85,11 +87,12 @@ def _handle_context_growth(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
+        category=finding.category,
         title="Trace sizes growing over time",
         description=(
             f"Recent traces are {ratio:.1f}x larger than older ones. "
             f"This could indicate conversation history accumulation, "
-            f"larger resume batches, or unnecessary data in tool responses."
+            f"larger input batches, or unnecessary data in tool responses."
         ),
         action="Review conversation history management. Consider summarizing earlier turns instead of keeping full history.",
         confidence=0.6,
@@ -107,12 +110,13 @@ def _handle_tool_redundancy(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="prompt_fix",
         severity=finding.severity,
+        category=finding.category,
         title=f"Redundant tool calls: {worst}",
         description=(
             f"The agent is calling {worst} multiple times in {rate:.0%} of runs. "
             f"This wastes API calls and increases latency."
         ),
-        action=f"Add instruction to the system prompt: 'Do not call {worst} more than once per pipeline run unless processing different candidates.'",
+        action=f"Add instruction to the system prompt: 'Do not call {worst} more than once per pipeline run unless processing different inputs.'",
         confidence=0.75,
         auto_applicable=False,
         evidence=finding.evidence,
@@ -134,6 +138,7 @@ def _handle_score_degradation(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="prompt_fix" if scorer in action_map else "investigate",
         severity=finding.severity,
+        category=finding.category,
         title=f"{scorer} score is low ({pass_rate:.0%})",
         description=(
             f"The {scorer} evaluation is passing only {pass_rate:.0%} of the time. "
@@ -155,6 +160,7 @@ def _handle_score_declining(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
+        category=finding.category,
         title=f"{scorer} quality declining",
         description=(
             f"{scorer} dropped from {older:.0%} to {recent:.0%} in recent runs. "
@@ -174,13 +180,14 @@ def _handle_slow_execution(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="config_change",
         severity=finding.severity,
+        category=finding.category,
         title=f"Slow pipeline ({avg_ms / 1000:.0f}s average)",
         description=(
             f"Pipeline runs are averaging {avg_ms / 1000:.0f} seconds. "
-            f"This may be due to large batch sizes, many scoring passes, "
+            f"This may be due to large batch sizes, many processing passes, "
             f"or slow tool responses."
         ),
-        action="Consider reducing scoring passes from 3 to 1 for initial filtering, or processing resumes in smaller batches.",
+        action="Consider reducing processing passes for initial filtering, or processing inputs in smaller batches.",
         confidence=0.6,
         auto_applicable=False,
         evidence=finding.evidence,
@@ -194,13 +201,14 @@ def _handle_execution_slowdown(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
+        category=finding.category,
         title=f"Execution time increasing ({ratio:.1f}x slower)",
         description=(
             f"Recent runs are {ratio:.1f}x slower than older ones. "
             f"This could indicate growing input size, API rate limiting, "
             f"or context window pressure."
         ),
-        action="Check if resume count has increased. Monitor API response times. Consider if the model needs upgrading.",
+        action="Check if input size has increased. Monitor API response times. Consider if the model needs upgrading.",
         confidence=0.6,
         auto_applicable=False,
         evidence=finding.evidence,
@@ -215,6 +223,7 @@ def _handle_error_spike(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="investigate",
         severity=finding.severity,
+        category=finding.category,
         title=f"Tool errors increasing ({rate:.0%} of runs affected)",
         description=(
             f"Tool calls are failing in {rate:.0%} of recent runs "
@@ -235,6 +244,7 @@ def _handle_incomplete_pipeline(finding: Finding) -> Suggestion:
         id=_make_id(finding.pattern, finding.description),
         type="prompt_fix",
         severity=finding.severity,
+        category=finding.category,
         title="Pipeline steps being skipped",
         description=(
             f"The agent is not completing all pipeline steps. "
